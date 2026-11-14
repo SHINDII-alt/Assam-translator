@@ -20,9 +20,10 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
 body{height:100dvh;display:flex;flex-direction:column;overflow:hidden;
   padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
 header{display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--line);flex:none}
-header h1{font-size:15px;margin:0;flex:1;letter-spacing:.02em}
+header h1{font-size:14px;margin:0;flex:1;min-width:0;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header{gap:6px}
 .iconbtn{background:var(--panel2);border:1px solid var(--line);color:var(--text);
-  border-radius:10px;padding:6px 10px;font-size:14px}
+  border-radius:10px;padding:6px 9px;font-size:13px;flex:none;min-width:34px}
 #status{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--sub);padding:5px 16px;flex-wrap:wrap;flex:none}
 .dot{width:9px;height:9px;border-radius:50%;background:#555}
 .dot.on{background:var(--accent);box-shadow:0 0 8px var(--accent)}
@@ -34,25 +35,37 @@ header h1{font-size:15px;margin:0;flex:1;letter-spacing:.02em}
 /* ===== 上下2段 ===== */
 #panes{flex:1;min-height:0;display:flex;flex-direction:column}
 .pane{position:relative;min-height:0;display:flex;flex-direction:column;background:var(--panel)}
-#paneSrc{flex:1}
-#paneTr{flex:1.35;border-top:2px solid var(--line);background:#0d1115}
+#paneSrc{flex:0.43 1 0}
+#paneTr{flex:0.57 1 0;background:#0d1115}
+#divider{flex:none;height:22px;margin:-6px 0;position:relative;z-index:2;touch-action:none;cursor:row-resize;
+  display:flex;align-items:center;justify-content:center;-webkit-user-select:none;user-select:none}
+#divider::before{content:"";position:absolute;left:0;right:0;top:50%;height:2px;margin-top:-1px;background:var(--line)}
+#divider .grip{position:relative;width:46px;height:6px;border-radius:3px;background:#56636f}
+#divider.drag::before{background:var(--accent2)}
+#divider.drag .grip{background:var(--accent2)}
 .paneHead{flex:none;display:flex;justify-content:space-between;align-items:center;
   font-size:11px;color:var(--sub);padding:6px 16px 2px;letter-spacing:.05em}
 .paneBody{flex:1;overflow-y:auto;padding:4px 16px 12px;-webkit-overflow-scrolling:touch}
-.seg{padding:3px 0;border-radius:6px;scroll-margin:40px}
-.seg.hl{background:rgba(45,143,213,.18)}
-#paneSrc .seg{font-size:17px;line-height:1.55;color:#cfd8e0}
-#paneSrc .seg .t{font-size:10px;color:var(--sub);margin-right:6px;vertical-align:middle}
-#paneTr .seg{font-size:22px;line-height:1.5;font-weight:600;margin-bottom:6px}
-#paneTr .seg .en{display:block;font-size:16px;font-weight:500;color:#bfe3ff;margin-top:2px}
-#paneTr .seg.pending{color:var(--interim);font-weight:400;font-size:15px}
+:root{--fs:1}
+.seg{padding:6px 10px 7px;margin:0 0 8px;border-radius:8px;scroll-margin:40px;white-space:pre-line;
+  border-left:3px solid transparent;transition:opacity .3s,background .3s;letter-spacing:.01em}
+.tail{white-space:pre-line;padding:0 10px}
+.seg.old{opacity:.62}
+.seg.latest{border-left-color:var(--accent);background:rgba(255,255,255,.035)}
+.seg.hl{background:rgba(45,143,213,.2);opacity:1}
+#paneSrc .seg{font-size:calc(var(--fs)*16px);line-height:1.65;color:#cfd8e0}
+#paneSrc .seg .t{display:block;font-size:10px;color:var(--sub);margin-bottom:1px;letter-spacing:.04em}
+#paneTr .seg{font-size:calc(var(--fs)*22px);line-height:1.6;font-weight:600}
+#paneTr .seg .en{display:block;font-size:calc(var(--fs)*16px);font-weight:500;color:#bfe3ff;
+  margin-top:6px;padding-top:5px;border-top:1px dashed rgba(255,255,255,.12)}
+#paneTr .seg.pending{color:var(--interim);font-weight:400;font-size:calc(var(--fs)*15px)}
 #paneTr .seg .err{color:var(--err);font-size:13px;font-weight:400}
 .cursor::after{content:"▍";color:var(--accent);animation:blink 1s steps(1) infinite;margin-left:1px}
 @keyframes blink{50%{opacity:0}}
 .tail{min-height:1.4em}
-#srcTail{font-size:17px;line-height:1.55;color:var(--interim);font-style:italic}
-#trTail{font-size:20px;line-height:1.5;color:var(--draft);font-weight:500}
-#trTail .en{display:block;font-size:15px;color:#8fb2c8}
+#srcTail{font-size:calc(var(--fs)*16px);line-height:1.65;color:var(--interim);font-style:italic}
+#trTail{font-size:calc(var(--fs)*20px);line-height:1.6;color:var(--draft);font-weight:500}
+#trTail .en{display:block;font-size:calc(var(--fs)*15px);color:#8fb2c8;margin-top:4px}
 .jump{position:absolute;right:12px;bottom:10px;background:var(--accent2);color:#fff;border:0;border-radius:999px;
   padding:5px 12px;font-size:12px;display:none;box-shadow:0 2px 8px rgba(0,0,0,.4)}
 .jump.show{display:block}
@@ -91,6 +104,8 @@ textarea{min-height:64px}
 <body>
 <header>
   <h1>Assam Live Translator</h1>
+  <button class="iconbtn" id="fsDown" title="文字を小さく">A−</button>
+  <button class="iconbtn" id="fsUp" title="文字を大きく">A＋</button>
   <button class="iconbtn" id="btnText" title="テキストで試す">⌨︎</button>
   <button class="iconbtn" id="btnExport" title="書き出し">⇩</button>
   <button class="iconbtn" id="btnSettings" title="設定">⚙︎</button>
@@ -112,6 +127,7 @@ textarea{min-height:64px}
     </div>
     <button class="jump" id="srcJump">↓ 最新へ</button>
   </section>
+  <div id="divider" title="ドラッグで上下の高さを調整（ダブルタップで元に戻す）"><div class="grip"></div></div>
   <section class="pane" id="paneTr">
     <div class="paneHead"><span id="trHead">🌐 翻訳（日本語）</span><span></span></div>
     <div class="paneBody" id="trBody">
@@ -144,9 +160,9 @@ textarea{min-height:64px}
     <h3>① 文字起こし（音声 → アッサム語）</h3>
     <label>エンジン</label>
     <select id="sttEngine">
-      <option value="gemini-live">Gemini Live（リアルタイム・推奨／回線が強い時）</option>
-      <option value="gemini-chunk">Gemini 区切り送信（回線が弱い時）</option>
-      <option value="openai-chunk">OpenAI 区切り送信（比較用）</option>
+      <option value="gemini-live">Gemini リアルタイム（おすすめ）</option>
+      <option value="gemini-chunk">Gemini 回線が弱い時用（ひと言ごとに送信）</option>
+      <option value="openai-chunk">OpenAI（比較用・ひと言ごとに送信）</option>
     </select>
     <label>モデル</label>
     <input id="sttModel" list="sttModels" autocomplete="off" autocapitalize="off">
@@ -158,12 +174,6 @@ textarea{min-height:64px}
       <option value="as+en+hi">アッサム語＋英語・ヒンディー語混じり</option>
       <option value="auto">自動判定</option>
     </select>
-    <label>区切りモード：無音で区切る長さ（秒）</label>
-    <input id="silenceSec" type="number" step="0.1" min="0.3" max="3">
-    <label>区切りモード：最大の長さ（秒）</label>
-    <input id="maxSec" type="number" step="1" min="3" max="30">
-    <label>マイク感度（無音判定のしきい値・小さいほど敏感）</label>
-    <input id="vadThresh" type="number" step="0.002" min="0.002" max="0.1">
 
     <h3>② 翻訳（アッサム語 → 日本語・英語）</h3>
     <label>エンジン</label>
@@ -185,6 +195,15 @@ textarea{min-height:64px}
     <label>仮訳の間隔（秒）</label>
     <input id="draftSec" type="number" step="0.5" min="0.5" max="10">
     <div class="hint">仮訳は Gemini Live のときに働きます。間隔を短くすると速くなりますが、翻訳APIの呼び出し回数（料金）が増えます。</div>
+
+    <h3>表示</h3>
+    <label>字幕が流れる速さ</label>
+    <select id="scrollSpeed">
+      <option value="slow">ゆっくり（1秒に約1行）</option>
+      <option value="normal">ふつう（1秒に約2行）</option>
+      <option value="fast">速い（すぐ最新へ移動）</option>
+    </select>
+    <div class="hint">画面に指で触れている間はスクロールが止まり、離して2.5秒後に再開します。上にスクロールすると自動送りが止まり、「↓ 最新へ」で戻れます。</div>
 
     <h3>③ 文脈・専門用語（精度アップ用・任意）</h3>
     <label>場面の説明（翻訳AIに渡します）</label>
@@ -220,7 +239,7 @@ const STT_MODELS = {
   'gemini-live':  {list:['gemini-3.5-transcribe-live'], def:'gemini-3.5-transcribe-live',
     hint:'話している途中から字幕が出ます。1セッション10分上限のため、9分半で自動的につなぎ直します。'},
   'gemini-chunk': {list:['gemini-3.5-flash-lite','gemini-3.8-flash','gemini-4-hydrogen'], def:'gemini-3.5-flash-lite',
-    hint:'無音で区切った音声をまとめて送ります。通信量が少なく、回線が不安定でも途切れにくい方式です。'},
+    hint:'話し終わって少し間が空くごとに、まとめて送ります。字幕は数秒遅れますが、回線が不安定でも途切れにくい方式です。'},
   'openai-chunk': {list:['gpt-transcribe','gpt-4o-transcribe'], def:'gpt-transcribe',
     hint:'OpenAIのアッサム語対応は公式に明記されていません。比較用として使ってください。'},
 };
@@ -233,7 +252,7 @@ const TR_MODELS = {
 };
 const DEFAULTS = {
   sttEngine:'gemini-live', sttModel:'', sttLang:'as', silenceSec:0.8, maxSec:12, vadThresh:0.012,
-  trEngine:'gemini', trModel:'', target:'ja', draftOn:'on', draftSec:1.5, context:'', vocab:'',
+  trEngine:'gemini', trModel:'', target:'ja', draftOn:'on', draftSec:1.5, scrollSpeed:'normal', context:'', vocab:'',
   keyGemini:'', keyOpenai:'', keyClaude:'', keyGct:'',
 };
 const LS = 'assamTranslator.v1';
@@ -241,12 +260,13 @@ let S = loadSettings();
 function loadSettings(){
   let s = {};
   try{ s = JSON.parse(localStorage.getItem(LS)||'{}'); }catch(e){}
+  delete s.silenceSec; delete s.maxSec; delete s.vadThresh; // 固定値を使う
   return Object.assign({}, DEFAULTS, s);
 }
 function saveSettings(){ try{ localStorage.setItem(LS, JSON.stringify(S)); }catch(e){} }
 
 const $ = id => document.getElementById(id);
-const FIELDS = ['sttEngine','sttModel','sttLang','silenceSec','maxSec','vadThresh','trEngine','trModel','draftOn','draftSec','context','vocab','keyGemini','keyOpenai','keyClaude','keyGct'];
+const FIELDS = ['sttEngine','sttModel','sttLang','trEngine','trModel','draftOn','draftSec','scrollSpeed','context','vocab','keyGemini','keyOpenai','keyClaude','keyGct'];
 
 function fillDatalist(dl, list){ dl.innerHTML = list.map(m=>`<option value="${m}">`).join(''); }
 function syncSettingsUI(){
@@ -308,23 +328,87 @@ function sttLangCodes(bcp){ // bcp=true → as-IN style
 }
 function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function now(){ return new Date().toTimeString().slice(0,8); }
+/* 読みやすい位置で改行：文末で改行し、長い日本語は読点で折り返す */
+function brk(s){
+  if(!s) return s;
+  let t = String(s).replace(/\r/g,'')
+    .replace(/([。！？!?।॥])[ \t　]*(?=\S)/g, '$1\n')                 // 文末記号
+    .replace(/([.])[ \t]+(?=["'(“]?[A-Zঀ-৿])/g, '$1\n')    // 英語・アッサム語のピリオド
+    .replace(/\n{2,}/g, '\n');
+  return t.split('\n').map(line=>{
+    if(line.length <= 38 || !/[、，]/.test(line)) return line;
+    let out='', cnt=0;
+    for(const ch of line){ out+=ch; cnt++; if((ch==='、'||ch==='，') && cnt>=22){ out+='\n'; cnt=0; } }
+    return out.replace(/\n$/,'');
+  }).join('\n').trim();
+}
 
 /* ============ 上下ペイン（自動スクロール） ============ */
+/* なめらかに一定速度で追従するスクロール。指で触れている間は停止 */
+const SCROLL_SPEED = {slow:35, normal:70, fast:0}; // px/秒（0=即時）
 function makeScroller(bodyId, jumpId){
-  const body=$(bodyId), jump=$(jumpId); let stick=true;
-  body.addEventListener('scroll', ()=>{ stick = body.scrollHeight - body.scrollTop - body.clientHeight < 60; jump.classList.toggle('show', !stick); });
-  jump.onclick = ()=>{ stick=true; body.scrollTop=body.scrollHeight; jump.classList.remove('show'); };
-  return { bottom(){ if(stick) body.scrollTop = body.scrollHeight; } };
+  const body=$(bodyId), jump=$(jumpId);
+  let stick=true, raf=null, lastSet=-1, lastTs=0, touching=false, resumeTimer=null;
+  const nearBottom = ()=> body.scrollHeight - body.scrollTop - body.clientHeight < 60;
+  body.addEventListener('scroll', ()=>{
+    if(Math.abs(body.scrollTop - lastSet) < 2) return;   // 自動スクロールによるもの
+    stick = nearBottom(); jump.classList.toggle('show', !stick);
+  });
+  body.addEventListener('touchstart', ()=>{ touching=true; clearTimeout(resumeTimer); }, {passive:true});
+  body.addEventListener('touchend', ()=>{ resumeTimer=setTimeout(()=>{ touching=false; api.bottom(); }, 2500); }, {passive:true});
+  const step = ts=>{
+    raf=null;
+    if(!stick || touching) return;
+    const goal = body.scrollHeight - body.clientHeight, diff = goal - body.scrollTop;
+    if(diff <= 0.5) return;
+    let v = SCROLL_SPEED[S.scrollSpeed] ?? 70;
+    const dt = lastTs ? Math.min(0.1, (ts-lastTs)/1000) : 0.016; lastTs = ts;
+    if(!v) { body.scrollTop = goal; lastSet = body.scrollTop; return; }
+    if(diff > body.clientHeight) v *= 1 + diff/body.clientHeight; // 遅れすぎたら少し追い上げ
+    body.scrollTop = body.scrollTop + Math.max(0.5, Math.min(diff, v*dt));
+    lastSet = body.scrollTop;
+    raf = requestAnimationFrame(step);
+  };
+  const api = { bottom(){ if(stick && !touching && !raf){ lastTs=0; raf=requestAnimationFrame(step); } } };
+  jump.onclick = ()=>{ stick=true; touching=false; jump.classList.remove('show'); api.bottom(); };
+  return api;
 }
+/* 上下の境界線ドラッグ */
+(function(){
+  const div=$('divider'), panes=$('panes'), KEY='assamTranslator.split', DEF=0.43;
+  const apply = r=>{ r=Math.min(0.85, Math.max(0.12, r)); $('paneSrc').style.flex=`${r} 1 0`; $('paneTr').style.flex=`${1-r} 1 0`; return r; };
+  let ratio = DEF; try{ const v=parseFloat(localStorage.getItem(KEY)); if(v) ratio=v; }catch(e){}
+  apply(ratio);
+  let dragging=false, lastTap=0;
+  div.addEventListener('pointerdown', e=>{
+    const t=Date.now(); if(t-lastTap<350){ ratio=apply(DEF); try{localStorage.setItem(KEY,ratio);}catch(_){} lastTap=0; return; } lastTap=t;
+    dragging=true; div.classList.add('drag'); div.setPointerCapture(e.pointerId); e.preventDefault();
+  });
+  div.addEventListener('pointermove', e=>{
+    if(!dragging) return;
+    const r=panes.getBoundingClientRect(); ratio=apply((e.clientY - r.top)/r.height);
+  });
+  const end=()=>{ if(!dragging) return; dragging=false; div.classList.remove('drag'); try{localStorage.setItem(KEY,ratio);}catch(_){}
+    srcScroll.bottom(); trScroll.bottom(); };
+  div.addEventListener('pointerup', end); div.addEventListener('pointercancel', end);
+})();
+/* 文字サイズ */
+(function(){
+  const KEY='assamTranslator.fs'; let fs=1; try{ fs=parseFloat(localStorage.getItem(KEY))||1; }catch(e){}
+  const set=v=>{ fs=Math.round(Math.min(1.8, Math.max(0.7, v))*10)/10; document.documentElement.style.setProperty('--fs', fs);
+    try{ localStorage.setItem(KEY, fs); }catch(e){} srcScroll && srcScroll.bottom(); trScroll && trScroll.bottom(); };
+  $('fsDown').onclick=()=>set(fs-0.1); $('fsUp').onclick=()=>set(fs+0.1);
+  setTimeout(()=>set(fs));
+})();
 const srcScroll = makeScroller('srcBody','srcJump');
 const trScroll  = makeScroller('trBody','trJump');
-function setSrcTail(text){ $('srcTail').textContent = text||''; srcScroll.bottom(); }
+function setSrcTail(text){ $('srcTail').textContent = brk(text||''); srcScroll.bottom(); }
 function setTrTail(r){
   const el=$('trTail');
   if(!r){ el.innerHTML=''; return; }
   let h='';
-  if(S.target!=='en' && r.ja) h += esc(r.ja);
-  if(S.target!=='ja' && r.en) h += (S.target==='both' ? `<span class="en">${esc(r.en)}</span>` : esc(r.en));
+  if(S.target!=='en' && r.ja) h += esc(brk(r.ja));
+  if(S.target!=='ja' && r.en) h += (S.target==='both' ? `<span class="en">${esc(brk(r.en))}</span>` : esc(brk(r.en)));
   el.innerHTML = h ? h + ' …' : '';
   trScroll.bottom();
 }
@@ -335,10 +419,14 @@ function addEntry(src, meta){
   $('emptyMsg').style.display='none';
   const e = {i:entries.length, t:now(), src, ja:null, en:null, err:null, streaming:false, meta:meta||''};
   e.srcEl = document.createElement('div'); e.srcEl.className='seg';
-  e.srcEl.innerHTML = `<span class="t">${e.t}</span>${esc(src)}`;
+  e.srcEl.innerHTML = `<span class="t">${e.t}</span>${esc(brk(src))}`;
   e.trEl = document.createElement('div'); e.trEl.className='seg';
   e.srcEl.onclick = ()=>linkTo(e, 'tr'); e.trEl.onclick = ()=>linkTo(e, 'src');
   $('srcList').appendChild(e.srcEl); $('trList').appendChild(e.trEl);
+  // 最新だけ明るく、2つ前より古いものは少し暗く
+  entries.forEach((x,k)=>{ const old = entries.length - k >= 2; x.srcEl.classList.remove('latest'); x.trEl.classList.remove('latest');
+    x.srcEl.classList.toggle('old', old); x.trEl.classList.toggle('old', old); });
+  e.srcEl.classList.add('latest'); e.trEl.classList.add('latest');
   entries.push(e); renderEntry(e);
   $('srcCount').textContent = entries.length + ' 件';
   srcScroll.bottom();
@@ -361,8 +449,8 @@ function renderEntry(e){
   }
   el.className='seg';
   let h='';
-  if(want!=='en' && hasJa) h += esc(e.ja);
-  if(want!=='ja' && hasEn) h += want==='both' ? `<span class="en">${esc(e.en)}</span>` : esc(e.en);
+  if(want!=='en' && hasJa) h += esc(brk(e.ja));
+  if(want!=='ja' && hasEn) h += want==='both' ? `<span class="en">${esc(brk(e.en))}</span>` : esc(brk(e.en));
   el.innerHTML = h;
   if(e.streaming) el.classList.add('cursor');
   trScroll.bottom();
