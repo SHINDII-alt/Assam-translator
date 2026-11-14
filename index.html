@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#101418">
+<title>Assam Live Translator</title>
+<style>
+:root{
+  --bg:#101418; --panel:#1a2027; --panel2:#222a33; --line:#2e3742;
+  --text:#eef2f5; --sub:#9aa7b4; --accent:#3fb37f; --accent2:#2d8fd5;
+  --warn:#e5a23a; --err:#e05555; --interim:#7d8a97;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans Bengali","Segoe UI",sans-serif;
+  -webkit-text-size-adjust:100%}
+body{min-height:100dvh;display:flex;flex-direction:column;
+  padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+header{display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--line)}
+header h1{font-size:16px;margin:0;flex:1;letter-spacing:.02em}
+.iconbtn{background:var(--panel2);border:1px solid var(--line);color:var(--text);
+  border-radius:10px;padding:7px 11px;font-size:14px}
+#status{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--sub);padding:6px 16px;flex-wrap:wrap}
+.dot{width:9px;height:9px;border-radius:50%;background:#555}
+.dot.on{background:var(--accent);box-shadow:0 0 8px var(--accent)}
+.dot.busy{background:var(--warn)}
+.dot.err{background:var(--err)}
+.chip{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:2px 8px}
+#log{flex:1;overflow-y:auto;padding:8px 16px 16px;display:flex;flex-direction:column;gap:10px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+.card .time{font-size:11px;color:var(--sub);margin-bottom:4px;display:flex;justify-content:space-between}
+.src{font-size:16px;line-height:1.5;color:#cfd8e0}
+.tr{margin-top:6px;font-size:20px;line-height:1.45;font-weight:600}
+.tr.en{font-size:17px;font-weight:500;color:#bfe3ff}
+.tr.pending{color:var(--interim);font-weight:400;font-size:15px}
+.tr.error{color:var(--err);font-size:13px;font-weight:400}
+.lbl{display:inline-block;font-size:10px;color:var(--sub);border:1px solid var(--line);border-radius:4px;padding:0 4px;margin-right:6px;vertical-align:middle;font-weight:400}
+#interim{padding:0 16px 6px;min-height:26px;color:var(--interim);font-size:15px;font-style:italic}
+footer{border-top:1px solid var(--line);padding:10px 16px 12px;display:flex;flex-direction:column;gap:10px;background:var(--bg)}
+.row{display:flex;gap:8px;align-items:center}
+.seg{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:10px;overflow:hidden;flex:1}
+.seg button{flex:1;background:none;border:0;color:var(--sub);padding:8px 4px;font-size:13px}
+.seg button.sel{background:var(--accent2);color:#fff}
+#mic{width:100%;border:0;border-radius:16px;padding:16px;font-size:18px;font-weight:700;
+  background:var(--accent);color:#06140d}
+#mic.rec{background:var(--err);color:#fff}
+#level{height:4px;background:var(--panel2);border-radius:2px;overflow:hidden}
+#level>div{height:100%;width:0;background:var(--accent);transition:width .08s}
+/* settings */
+#settings{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;z-index:10}
+#settings.open{display:block}
+#sheet{position:absolute;inset:auto 0 0 0;max-height:92dvh;overflow-y:auto;background:var(--panel);
+  border-radius:18px 18px 0 0;padding:16px 16px calc(24px + env(safe-area-inset-bottom))}
+#sheet h2{font-size:17px;margin:0 0 4px}
+#sheet h3{font-size:13px;color:var(--sub);margin:18px 0 6px;text-transform:uppercase;letter-spacing:.06em}
+label{display:block;font-size:13px;color:var(--sub);margin:10px 0 4px}
+input,select,textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--line);
+  border-radius:10px;padding:10px;font-size:16px;font-family:inherit}
+textarea{min-height:64px}
+.hint{font-size:12px;color:var(--sub);margin-top:4px;line-height:1.5}
+.btn{background:var(--accent2);color:#fff;border:0;border-radius:10px;padding:10px 14px;font-size:15px}
+.btn.ghost{background:var(--panel2);border:1px solid var(--line)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+#testbox{display:none}
+#testbox.open{display:flex}
+.warnbar{background:#3a2c12;color:#f3d39a;font-size:12px;padding:6px 16px;line-height:1.5}
+</style>
+</head>
+<body>
+<header>
+  <h1>Assam Live Translator</h1>
+  <button class="iconbtn" id="btnText" title="テキストで試す">⌨︎</button>
+  <button class="iconbtn" id="btnExport" title="書き出し">⇩</button>
+  <button class="iconbtn" id="btnSettings" title="設定">⚙︎</button>
+</header>
+<div id="warn" class="warnbar" style="display:none"></div>
+<div id="status">
+  <span class="dot" id="dot"></span><span id="stateText">待機中</span>
+  <span class="chip" id="chipStt"></span><span class="chip" id="chipTr"></span>
+  <span class="chip" id="chipTimer" style="display:none"></span>
+</div>
+<div id="log"></div>
+<div id="interim"></div>
+<footer>
+  <div class="row" id="testbox">
+    <input id="testInput" placeholder="アッサム語テキストを貼り付けて翻訳テスト">
+    <button class="btn" id="testGo">翻訳</button>
+  </div>
+  <div class="row">
+    <div class="seg" id="targetSeg">
+      <button data-v="ja">日本語</button><button data-v="en">English</button><button data-v="both">両方</button>
+    </div>
+  </div>
+  <div id="level"><div></div></div>
+  <button id="mic">● 聞き取り開始</button>
+</footer>
+
+<div id="settings">
+  <div id="sheet">
+    <div class="row"><h2 style="flex:1">設定</h2><button class="btn" id="closeSettings">閉じる</button></div>
+    <div class="hint">APIキーはこのiPhoneのブラウザ内にだけ保存されます（外部サーバーには送りません。各AI会社のAPIへ直接送信）。</div>
+
+    <h3>① 文字起こし（音声 → アッサム語）</h3>
+    <label>エンジン</label>
+    <select id="sttEngine">
+      <option value="gemini-live">Gemini Live（リアルタイム・推奨／回線が強い時）</option>
+      <option value="gemini-chunk">Gemini 区切り送信（回線が弱い時）</option>
+      <option value="openai-chunk">OpenAI 区切り送信（比較用）</option>
+    </select>
+    <label>モデル</label>
+    <input id="sttModel" list="sttModels" autocomplete="off" autocapitalize="off">
+    <datalist id="sttModels"></datalist>
+    <div class="hint" id="sttHint"></div>
+    <label>言語</label>
+    <select id="sttLang">
+      <option value="as">アッサム語のみ</option>
+      <option value="as+en+hi">アッサム語＋英語・ヒンディー語混じり</option>
+      <option value="auto">自動判定</option>
+    </select>
+    <label>区切りモード：無音で区切る長さ（秒）</label>
+    <input id="silenceSec" type="number" step="0.1" min="0.3" max="3">
+    <label>区切りモード：最大の長さ（秒）</label>
+    <input id="maxSec" type="number" step="1" min="3" max="30">
+    <label>マイク感度（無音判定のしきい値・小さいほど敏感）</label>
+    <input id="vadThresh" type="number" step="0.002" min="0.002" max="0.1">
+
+    <h3>② 翻訳（アッサム語 → 日本語・英語）</h3>
+    <label>エンジン</label>
+    <select id="trEngine">
+      <option value="gemini">Gemini</option>
+      <option value="google">Google Cloud Translation（速い・安い）</option>
+      <option value="openai">OpenAI GPT</option>
+      <option value="claude">Claude</option>
+    </select>
+    <label>モデル</label>
+    <input id="trModel" list="trModels" autocomplete="off" autocapitalize="off">
+    <datalist id="trModels"></datalist>
+    <div class="hint" id="trHint"></div>
+
+    <h3>③ 文脈・専門用語（精度アップ用・任意）</h3>
+    <label>場面の説明（翻訳AIに渡します）</label>
+    <textarea id="context" placeholder="例：アッサム州の村での乳がん検診に関する聞き取り。話者は保健ワーカーと住民。"></textarea>
+    <label>専門用語・固有名詞（改行区切り）</label>
+    <textarea id="vocab" placeholder="例：&#10;স্তন কেন্সাৰ&#10;ASHA&#10;JICA&#10;mammography"></textarea>
+
+    <h3>④ APIキー</h3>
+    <label>Google AI Studio（Gemini）</label>
+    <input id="keyGemini" type="password" autocomplete="off" placeholder="AIza...">
+    <label>OpenAI</label>
+    <input id="keyOpenai" type="password" autocomplete="off" placeholder="sk-...">
+    <label>Anthropic（Claude）</label>
+    <input id="keyClaude" type="password" autocomplete="off" placeholder="sk-ant-...">
+    <label>Google Cloud Translation</label>
+    <input id="keyGct" type="password" autocomplete="off" placeholder="AIza...">
+    <div class="hint">使うエンジンのキーだけ入れればOKです。Gemini 1本で文字起こし＋翻訳の両方ができます。</div>
+
+    <h3>その他</h3>
+    <div class="grid2">
+      <button class="btn ghost" id="btnClear">記録を消去</button>
+      <button class="btn ghost" id="btnKeyCheck">キー接続テスト</button>
+    </div>
+    <div class="hint" id="keyCheckOut"></div>
+    <div class="hint" style="margin-top:14px">医療面談で使う場合は、相手の同意を得て、重要な判断に関わる内容は必ず人（通訳者）が確認してください。AIの翻訳は誤る可能性があります。</div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ============ 設定 ============ */
+const STT_MODELS = {
+  'gemini-live':  {list:['gemini-3.5-transcribe-live'], def:'gemini-3.5-transcribe-live',
+    hint:'話している途中から字幕が出ます。1セッション10分上限のため、9分半で自動的につなぎ直します。'},
+  'gemini-chunk': {list:['gemini-3.5-flash-lite','gemini-3.8-flash','gemini-4-hydrogen'], def:'gemini-3.5-flash-lite',
+    hint:'無音で区切った音声をまとめて送ります。通信量が少なく、回線が不安定でも途切れにくい方式です。'},
+  'openai-chunk': {list:['gpt-transcribe','gpt-4o-transcribe'], def:'gpt-transcribe',
+    hint:'OpenAIのアッサム語対応は公式に明記されていません。比較用として使ってください。'},
+};
+const TR_MODELS = {
+  gemini: {list:['gemini-3.5-flash-lite','gemini-3.8-flash','gemini-4-hydrogen'], def:'gemini-3.5-flash-lite',
+    hint:'flash-lite が速くて安い。精度重視なら gemini-4-hydrogen。'},
+  google: {list:['nmt'], def:'nmt', hint:'Google翻訳エンジン。最速・最安ですが文脈は考慮しません。'},
+  openai: {list:['gpt-5.6-luna','gpt-5.6-terra','gpt-6.1-terra'], def:'gpt-5.6-luna', hint:'luna が軽量・高速、terra が高精度。'},
+  claude: {list:['claude-haiku-5-5','claude-sonnet-5-5','claude-opus-5-5'], def:'claude-haiku-5-5', hint:'Haiku が高速、Sonnet が高精度。'},
+};
+const DEFAULTS = {
+  sttEngine:'gemini-live', sttModel:'', sttLang:'as', silenceSec:0.8, maxSec:12, vadThresh:0.012,
+  trEngine:'gemini', trModel:'', target:'ja', context:'', vocab:'',
+  keyGemini:'', keyOpenai:'', keyClaude:'', keyGct:'',
+};
+const LS = 'assamTranslator.v1';
+let S = loadSettings();
+function loadSettings(){
+  let s = {};
+  try{ s = JSON.parse(localStorage.getItem(LS)||'{}'); }catch(e){}
+  return Object.assign({}, DEFAULTS, s);
+}
+function saveSettings(){ try{ localStorage.setItem(LS, JSON.stringify(S)); }catch(e){} }
+
+const $ = id => document.getElementById(id);
+const FIELDS = ['sttEngine','sttModel','sttLang','silenceSec','maxSec','vadThresh','trEngine','trModel','context','vocab','keyGemini','keyOpenai','keyClaude','keyGct'];
+
+function fillDatalist(dl, list){ dl.innerHTML = list.map(m=>`<option value="${m}">`).join(''); }
+function syncSettingsUI(){
+  FIELDS.forEach(f=>{ $(f).value = S[f]; });
+  const sm = STT_MODELS[S.sttEngine]; fillDatalist($('sttModels'), sm.list);
+  if(!S.sttModel || !sameFamily(S.sttEngine, S.sttModel)) { S.sttModel = sm.def; $('sttModel').value = sm.def; }
+  $('sttHint').textContent = sm.hint;
+  const tm = TR_MODELS[S.trEngine]; fillDatalist($('trModels'), tm.list);
+  if(!S.trModel || !sameFamilyTr(S.trEngine, S.trModel)) { S.trModel = tm.def; $('trModel').value = tm.def; }
+  $('trHint').textContent = tm.hint;
+  updateChips();
+}
+function sameFamily(eng, m){
+  if(eng==='gemini-live') return /live/.test(m);
+  if(eng==='gemini-chunk') return /^gemini/.test(m) && !/live/.test(m);
+  if(eng==='openai-chunk') return /^(gpt|whisper)/.test(m);
+  return true;
+}
+function sameFamilyTr(eng, m){
+  return eng==='gemini' ? /^gemini/.test(m) : eng==='openai' ? /^(gpt|o\d)/.test(m)
+       : eng==='claude' ? /^claude/.test(m) : eng==='google' ? m==='nmt' : true;
+}
+FIELDS.forEach(f=>{
+  $(f).addEventListener('change', ()=>{
+    const el=$(f); S[f] = el.type==='number' ? parseFloat(el.value) : el.value.trim();
+    if(f==='sttEngine') S.sttModel='';
+    if(f==='trEngine') S.trModel='';
+    saveSettings(); syncSettingsUI();
+  });
+});
+function updateChips(){
+  $('chipStt').textContent = '字幕: ' + S.sttModel;
+  $('chipTr').textContent  = '翻訳: ' + (S.trEngine==='google' ? 'Google翻訳' : S.trModel);
+  document.querySelectorAll('#targetSeg button').forEach(b=>b.classList.toggle('sel', b.dataset.v===S.target));
+}
+document.querySelectorAll('#targetSeg button').forEach(b=>b.onclick=()=>{ S.target=b.dataset.v; saveSettings(); updateChips(); });
+$('btnSettings').onclick = ()=>$('settings').classList.add('open');
+$('closeSettings').onclick = ()=>{ $('settings').classList.remove('open'); };
+$('settings').addEventListener('click', e=>{ if(e.target.id==='settings') $('settings').classList.remove('open'); });
+$('btnText').onclick = ()=>$('testbox').classList.toggle('open');
+
+/* ============ 状態表示 ============ */
+function setState(text, cls){ $('stateText').textContent = text; $('dot').className = 'dot ' + (cls||''); }
+function showWarn(msg){ const w=$('warn'); if(!msg){w.style.display='none';return;} w.textContent=msg; w.style.display='block'; }
+function vocabList(){ return S.vocab.split(/\n+/).map(s=>s.trim()).filter(Boolean).slice(0,200); }
+function sttLangCodes(bcp){ // bcp=true → as-IN style
+  if(S.sttLang==='auto') return [];
+  const m = bcp ? {as:'as-IN',en:'en-IN',hi:'hi-IN'} : {as:'as',en:'en',hi:'hi'};
+  return S.sttLang.split('+').map(x=>m[x]);
+}
+
+/* ============ 記録 ============ */
+const entries = []; // {t, src, ja, en, el}
+function now(){ const d=new Date(); return d.toTimeString().slice(0,8); }
+function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function addEntry(src, meta){
+  const e = {t:now(), src, ja:null, en:null, err:null, meta:meta||''};
+  const el = document.createElement('div'); el.className='card';
+  e.el = el; entries.push(e); renderEntry(e);
+  $('log').appendChild(el); scrollBottom();
+  return e;
+}
+function renderEntry(e){
+  const want = S.target;
+  let tr = '';
+  if(e.err) tr = `<div class="tr error">翻訳エラー: ${esc(e.err)}</div>`;
+  else {
+    if(want!=='en') tr += e.ja!=null ? `<div class="tr"><span class="lbl">JA</span>${esc(e.ja)}</div>` : `<div class="tr pending">翻訳中…</div>`;
+    if(want!=='ja') tr += e.en!=null ? `<div class="tr en"><span class="lbl">EN</span>${esc(e.en)}</div>` : (want==='en'?`<div class="tr pending">Translating…</div>`:'');
+  }
+  e.el.innerHTML = `<div class="time"><span>${e.t}</span><span>${esc(e.meta)}</span></div><div class="src">${esc(e.src)}</div>${tr}`;
+}
+let stick = true;
+$('log').addEventListener('scroll', ()=>{ const l=$('log'); stick = l.scrollHeight - l.scrollTop - l.clientHeight < 80; });
+function scrollBottom(){ if(stick){ const l=$('log'); l.scrollTop = l.scrollHeight; } }
+$('btnClear').onclick = ()=>{ if(confirm('表示中の記録をすべて消去しますか？')){ entries.length=0; $('log').innerHTML=''; } };
+$('btnExport').onclick = ()=>{
+  if(!entries.length){ alert('まだ記録がありません'); return; }
+  const txt = entries.map(e=>`[${e.t}]\nAS: ${e.src}` + (e.ja?`\nJA: ${e.ja}`:'') + (e.en?`\nEN: ${e.en}`:'')).join('\n\n');
+  const name = 'assam_translation_' + new Date().toISOString().slice(0,16).replace(/[:T]/g,'-') + '.txt';
+  const blob = new Blob([txt], {type:'text/plain'});
+  const file = new File([blob], name, {type:'text/plain'});
+  if(navigator.canShare && navigator.canShare({files:[file]})) navigator.share({files:[file]}).catch(()=>{});
+  else { const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); }
+};
+
+/* ============ 翻訳 ============ */
+const trQueue = []; let trBusy = false;
+function requestTranslation(entry){ trQueue.push(entry); pumpTr(); }
+async function pumpTr(){
+  if(trBusy) return; trBusy = true;
+  while(trQueue.length){
+    const e = trQueue.shift();
+    try{
+      const r = await translate(e.src, contextBefore(e));
+      e.ja = r.ja ?? null; e.en = r.en ?? null;
+      if(S.target==='ja' && e.ja==null) e.ja='';
+      if(S.target==='en' && e.en==null) e.en='';
+    }catch(err){ e.err = err.message||String(err); }
+    renderEntry(e); scrollBottom();
+  }
+  trBusy = false;
+}
+function contextBefore(e){
+  const i = entries.indexOf(e);
+  return entries.slice(Math.max(0,i-4), i).map(x=>x.src).join('\n');
+}
+function trPrompt(text, prev){
+  const want = S.target;
+  const out = want==='both'
+    ? 'Return ONLY a JSON object: {"ja":"<Japanese translation>","en":"<English translation>"}.'
+    : `Return ONLY the ${want==='ja'?'Japanese':'English'} translation, nothing else.`;
+  return [
+    'You are a professional interpreter translating spoken Assamese (অসমীয়া) into ' + (want==='both'?'Japanese and English':want==='ja'?'natural Japanese':'natural English') + '.',
+    'The source is real-time speech recognition output: it may contain recognition errors, missing punctuation, or code-mixed English/Hindi words. Infer the intended meaning, but do not invent content.',
+    'If the text is already English or Hindi, still translate it to the target language(s).',
+    'If the input is empty noise or meaningless, return an empty translation.',
+    S.context ? 'Situation: ' + S.context : '',
+    vocabList().length ? 'Key terms: ' + vocabList().join(', ') : '',
+    prev ? 'Previous utterances (context only, do not translate):\n' + prev : '',
+    out,
+    '',
+    'Assamese text to translate:\n' + text
+  ].filter(Boolean).join('\n');
+}
+function parseTrOut(raw){
+  raw = (raw||'').trim();
+  if(S.target==='both'){
+    const m = raw.match(/\{[\s\S]*\}/);
+    if(m){ try{ const j = JSON.parse(m[0]); return {ja:j.ja||'', en:j.en||''}; }catch(e){} }
+    return {ja:raw, en:''};
+  }
+  raw = raw.replace(/^```[a-z]*\n?|```$/g,'').trim();
+  return S.target==='ja' ? {ja:raw} : {en:raw};
+}
+async function fetchJSON(url, opt, timeoutMs=30000){
+  const ctl = new AbortController(); const to = setTimeout(()=>ctl.abort(), timeoutMs);
+  try{
+    const res = await fetch(url, Object.assign({signal:ctl.signal}, opt));
+    const txt = await res.text(); let j; try{ j = JSON.parse(txt); }catch(e){ j = null; }
+    if(!res.ok){ const m = j?.error?.message || j?.error?.type || txt.slice(0,200); throw new Error(`${res.status} ${m}`); }
+    return j;
+  }catch(e){ if(e.name==='AbortError') throw new Error('タイムアウト（回線を確認）'); throw e; }
+  finally{ clearTimeout(to); }
+}
+function needKey(k, name){ if(!S[k]) throw new Error(`${name} のAPIキーが未設定です（⚙︎設定）`); return S[k]; }
+
+async function translate(text, prev){
+  const eng = S.trEngine, model = S.trModel;
+  if(eng==='google'){
+    const key = needKey('keyGct','Google Cloud Translation');
+    const one = async tgt => {
+      const j = await fetchJSON('https://translation.googleapis.com/language/translate/v2?key='+encodeURIComponent(key),
+        {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({q:text, source:'as', target:tgt, format:'text', model:'nmt'})});
+      return decodeHTML(j.data.translations[0].translatedText);
+    };
+    const r = {};
+    if(S.target!=='en') r.ja = await one('ja');
+    if(S.target!=='ja') r.en = await one('en');
+    return r;
+  }
+  const prompt = trPrompt(text, prev);
+  if(eng==='gemini'){
+    const key = needKey('keyGemini','Gemini');
+    const j = await fetchJSON(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`,
+      {method:'POST', headers:{'Content-Type':'application/json'},
+       body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}], generationConfig:{temperature:0.2}})});
+    return parseTrOut(geminiText(j));
+  }
+  if(eng==='openai'){
+    const key = needKey('keyOpenai','OpenAI');
+    const j = await fetchJSON('https://api.openai.com/v1/chat/completions',
+      {method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+       body:JSON.stringify({model, messages:[{role:'user',content:prompt}]})});
+    return parseTrOut(j.choices?.[0]?.message?.content);
+  }
+  if(eng==='claude'){
+    const key = needKey('keyClaude','Anthropic');
+    const j = await fetchJSON('https://api.anthropic.com/v1/messages',
+      {method:'POST', headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true'},
+       body:JSON.stringify({model, max_tokens:1024, messages:[{role:'user',content:prompt}]})});
+    return parseTrOut((j.content||[]).filter(c=>c.type==='text').map(c=>c.text).join(''));
+  }
+  throw new Error('不明な翻訳エンジン');
+}
+function geminiText(j){
+  const parts = j?.candidates?.[0]?.content?.parts || [];
+  return parts.filter(p=>p.text && !p.thought).map(p=>p.text).join('');
+}
+function decodeHTML(s){ const t=document.createElement('textarea'); t.innerHTML=s; return t.value; }
+
+$('testGo').onclick = ()=>{
+  const v = $('testInput').value.trim(); if(!v) return;
+  const e = addEntry(v, 'テキスト入力'); requestTranslation(e); $('testInput').value='';
+};
+
+/* ============ マイク・音声処理 ============ */
+let audioCtx=null, stream=null, srcNode=null, procNode=null, running=false, wakeLock=null;
+let onPCM16k = null; // callback(Int16Array 16kHz)
+let onLevel = null;
+
+async function startAudio(){
+  stream = await navigator.mediaDevices.getUserMedia({audio:{channelCount:1, echoCancellation:true, noiseSuppression:true, autoGainControl:true}});
+  audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  await audioCtx.resume();
+  srcNode = audioCtx.createMediaStreamSource(stream);
+  procNode = audioCtx.createScriptProcessor(4096, 1, 1);
+  const ratio = audioCtx.sampleRate / 16000;
+  let carry = 0;
+  procNode.onaudioprocess = ev=>{
+    const inp = ev.inputBuffer.getChannelData(0);
+    // RMS
+    let sum=0; for(let i=0;i<inp.length;i++) sum+=inp[i]*inp[i];
+    const rms = Math.sqrt(sum/inp.length);
+    // downsample (box filter average) to 16kHz
+    const outLen = Math.floor((inp.length - carry) / ratio);
+    const out = new Int16Array(outLen);
+    let pos = carry;
+    for(let i=0;i<outLen;i++){
+      const a = Math.floor(pos), b = Math.min(inp.length, Math.floor(pos+ratio));
+      let s=0, n=0; for(let k=a;k<b;k++){ s+=inp[k]; n++; }
+      const v = n? s/n : 0;
+      out[i] = Math.max(-32768, Math.min(32767, Math.round(v*32767)));
+      pos += ratio;
+    }
+    carry = pos - inp.length; if(carry<0) carry=0;
+    if(onLevel) onLevel(rms);
+    if(onPCM16k) onPCM16k(out, rms);
+    // silence output
+    ev.outputBuffer.getChannelData(0).fill(0);
+  };
+  srcNode.connect(procNode); procNode.connect(audioCtx.destination);
+  try{ if('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
+}
+function stopAudio(){
+  try{ procNode && procNode.disconnect(); srcNode && srcNode.disconnect(); }catch(e){}
+  try{ stream && stream.getTracks().forEach(t=>t.stop()); }catch(e){}
+  try{ audioCtx && audioCtx.close(); }catch(e){}
+  try{ wakeLock && wakeLock.release(); }catch(e){}
+  audioCtx=stream=srcNode=procNode=wakeLock=null; onPCM16k=null;
+  $('level').firstElementChild.style.width='0';
+}
+document.addEventListener('visibilitychange', async ()=>{
+  if(document.visibilityState==='visible' && running){
+    try{ if('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
+    if(audioCtx && audioCtx.state!=='running') audioCtx.resume().catch(()=>{});
+  }
+});
+onLevel = rms => { $('level').firstElementChild.style.width = Math.min(100, rms*600)+'%'; };
+
+function b64FromBytes(bytes){
+  let bin=''; const CH=0x8000;
+  for(let i=0;i<bytes.length;i+=CH) bin += String.fromCharCode.apply(null, bytes.subarray(i,i+CH));
+  return btoa(bin);
+}
+function int16ToB64(i16){ return b64FromBytes(new Uint8Array(i16.buffer, i16.byteOffset, i16.byteLength)); }
+function concatI16(chunks){
+  const len = chunks.reduce((a,c)=>a+c.length,0); const out=new Int16Array(len);
+  let o=0; for(const c of chunks){ out.set(c,o); o+=c.length; } return out;
+}
+function wavFromI16(i16, rate=16000){
+  const buf = new ArrayBuffer(44 + i16.length*2), v = new DataView(buf);
+  const w=(o,s)=>{for(let i=0;i<s.length;i++) v.setUint8(o+i,s.charCodeAt(i));};
+  w(0,'RIFF'); v.setUint32(4,36+i16.length*2,true); w(8,'WAVE'); w(12,'fmt ');
+  v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+  v.setUint32(24,rate,true); v.setUint32(28,rate*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true);
+  w(36,'data'); v.setUint32(40,i16.length*2,true);
+  new Int16Array(buf,44).set(i16);
+  return new Uint8Array(buf);
+}
+
+/* ============ エンジン1: Gemini Live（WebSocket） ============ */
+const LiveEngine = {
+  ws:null, sendBuf:[], sendLen:0, timer:null, sessionStart:0, reconnectTimer:null, closing:false, interimText:'',
+  async start(){
+    needKey('keyGemini','Gemini');
+    this.closing=false; await this.connect();
+    onPCM16k = (pcm)=>{
+      this.sendBuf.push(pcm); this.sendLen += pcm.length;
+      if(this.sendLen >= 1600){ // ~100ms
+        const chunk = concatI16(this.sendBuf); this.sendBuf=[]; this.sendLen=0;
+        if(this.ws && this.ws.readyState===1 && this.ready)
+          this.ws.send(JSON.stringify({realtimeInput:{audio:{data:int16ToB64(chunk), mimeType:'audio/pcm;rate=16000'}}}));
+      }
+    };
+    $('chipTimer').style.display='';
+    this.timer = setInterval(()=>this.tick(), 1000);
+  },
+  tick(){
+    if(!this.sessionStart) return;
+    const s = Math.floor((Date.now()-this.sessionStart)/1000);
+    $('chipTimer').textContent = 'セッション ' + Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
+    if(s >= 570 && !this.rotating) this.rotate(); // 9分30秒で張り替え
+  },
+  connect(){
+    return new Promise((resolve, reject)=>{
+      this.ready=false;
+      const url = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=' + encodeURIComponent(S.keyGemini);
+      const ws = new WebSocket(url); this.ws = ws;
+      setState('接続中…','busy');
+      let settled=false;
+      ws.onopen = ()=>{
+        const iat = {languageCodes: sttLangCodes(true)};
+        const voc = vocabList(); if(voc.length) iat.customVocabulary = voc;
+        ws.send(JSON.stringify({setup:{
+          model: 'models/' + S.sttModel,
+          generationConfig:{responseModalities:['TEXT']},
+          inputAudioTranscription: iat
+        }}));
+      };
+      ws.onmessage = async ev=>{
+        let txt = ev.data; if(txt instanceof Blob) txt = await txt.text();
+        let m; try{ m = JSON.parse(txt); }catch(e){ return; }
+        if(m.setupComplete){
+          this.ready=true; this.sessionStart=Date.now(); setState('聞き取り中（Live）','on');
+          if(!settled){ settled=true; resolve(); }
+          return;
+        }
+        const sc = m.serverContent;
+        if(sc?.interimInputTranscription){
+          this.interimText = sc.interimInputTranscription.text || '';
+          $('interim').textContent = this.interimText;
+        }
+        if(sc?.inputTranscription){
+          const t = (sc.inputTranscription.text||'').trim();
+          $('interim').textContent=''; this.interimText='';
+          if(t){ const e = addEntry(t, sc.inputTranscription.languageCode||''); requestTranslation(e); }
+        }
+        if(m.goAway && !this.rotating) this.rotate();
+        if(m.error){ showWarn('Gemini: ' + (m.error.message||JSON.stringify(m.error))); }
+      };
+      ws.onerror = ()=>{ if(!settled){ settled=true; reject(new Error('Gemini Liveに接続できません（APIキー・モデル名・回線を確認）')); } };
+      ws.onclose = ev=>{
+        if(this.ws!==ws) return; // 張り替え済み
+        this.ready=false;
+        if(!settled){ settled=true; reject(new Error(`接続が閉じられました: ${ev.code} ${ev.reason||''}`)); return; }
+        if(!this.closing && running){
+          if(ev.reason) showWarn('切断: ' + ev.code + ' ' + ev.reason);
+          setState('再接続中…','busy');
+          clearTimeout(this.reconnectTimer);
+          this.reconnectTimer = setTimeout(()=>this.connect().then(()=>showWarn('')).catch(e=>{ showWarn(e.message); this.reconnectTimer=setTimeout(()=>running&&this.connect().catch(()=>{}),3000); }), 800);
+        }
+      };
+    });
+  },
+  async rotate(){
+    // 新しいセッションを先に開いてから古い方を閉じる（途切れを最小化）
+    this.rotating = true;
+    const old = this.ws;
+    try{
+      if(old && old.readyState===1) old.send(JSON.stringify({realtimeInput:{audioStreamEnd:true}}));
+      await this.connect();
+      setTimeout(()=>{ try{ old.close(); }catch(e){} }, 3000);
+    }catch(e){ showWarn('張り替え失敗: '+e.message); }
+    this.rotating = false;
+  },
+  stop(){
+    this.closing=true; clearInterval(this.timer); clearTimeout(this.reconnectTimer);
+    const ws=this.ws; this.ws=null;
+    try{ if(ws && ws.readyState===1){ ws.send(JSON.stringify({realtimeInput:{audioStreamEnd:true}})); setTimeout(()=>ws.close(),1500); } else ws && ws.close(); }catch(e){}
+    if(this.interimText){ const e=addEntry(this.interimText,'途中'); requestTranslation(e); }
+    this.interimText=''; $('interim').textContent=''; $('chipTimer').style.display='none'; this.sessionStart=0;
+  }
+};
+
+/* ============ エンジン2/3: 区切り送信（VAD） ============ */
+const ChunkEngine = {
+  buf:[], len:0, silentMs:0, voicedMs:0, pre:[], inflight:0,
+  async start(){
+    if(S.sttEngine==='gemini-chunk') needKey('keyGemini','Gemini'); else needKey('keyOpenai','OpenAI');
+    this.buf=[]; this.len=0; this.silentMs=0; this.voicedMs=0; this.pre=[];
+    setState('聞き取り中（区切り）','on');
+    onPCM16k = (pcm, rms)=>{
+      const ms = pcm.length/16;
+      const voiced = rms > S.vadThresh;
+      if(!this.len){
+        // 発話待ち：直前0.3秒を保持
+        this.pre.push(pcm); let pl=this.pre.reduce((a,c)=>a+c.length,0);
+        while(pl > 4800 && this.pre.length>1){ pl-=this.pre.shift().length; }
+        if(voiced){ this.buf=[...this.pre]; this.len=pl; this.pre=[]; this.silentMs=0; this.voicedMs=ms; $('interim').textContent='🎙 発話を検出…'; }
+        return;
+      }
+      this.buf.push(pcm); this.len+=pcm.length;
+      if(voiced){ this.silentMs=0; this.voicedMs+=ms; } else this.silentMs+=ms;
+      const durMs = this.len/16;
+      if(this.silentMs >= S.silenceSec*1000 || durMs >= S.maxSec*1000) this.flush();
+    };
+  },
+  flush(){
+    const pcm = concatI16(this.buf); const voicedMs=this.voicedMs;
+    this.buf=[]; this.len=0; this.silentMs=0; this.voicedMs=0;
+    if(voicedMs < 250){ $('interim').textContent=''; return; } // ノイズ
+    this.inflight++; $('interim').textContent='⏳ 文字起こし中…（'+this.inflight+'件）';
+    this.transcribe(pcm).then(t=>{
+      t=(t||'').trim();
+      if(t && !/^\[?(silence|noise|無音)\]?$/i.test(t)){ const e=addEntry(t, (pcm.length/16000).toFixed(1)+'秒'); requestTranslation(e); }
+    }).catch(err=>{ showWarn('文字起こしエラー: '+err.message); setTimeout(()=>showWarn(''),6000); })
+      .finally(()=>{ this.inflight--; $('interim').textContent = this.inflight? '⏳ 文字起こし中…（'+this.inflight+'件）' : ''; });
+  },
+  async transcribe(pcm){
+    const wav = wavFromI16(pcm);
+    if(S.sttEngine==='gemini-chunk'){
+      const langs = S.sttLang==='auto' ? 'the spoken language(s)' : S.sttLang==='as' ? 'Assamese' : 'Assamese (with possible English/Hindi code-mixing)';
+      const prompt = `Transcribe this audio verbatim in ${langs}. Write Assamese in Assamese (Bengali-Assamese) script; keep English words in Latin script. Output ONLY the transcript. If there is no speech, output an empty string.` + (vocabList().length? '\nKey terms that may appear: '+vocabList().join(', ') : '');
+      const j = await fetchJSON(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(S.sttModel)}:generateContent?key=${encodeURIComponent(S.keyGemini)}`,
+        {method:'POST', headers:{'Content-Type':'application/json'},
+         body:JSON.stringify({contents:[{role:'user',parts:[{inline_data:{mime_type:'audio/wav', data:b64FromBytes(wav)}},{text:prompt}]}], generationConfig:{temperature:0}})}, 45000);
+      return geminiText(j);
+    } else {
+      const fd = new FormData();
+      fd.append('file', new Blob([wav],{type:'audio/wav'}), 'speech.wav');
+      fd.append('model', S.sttModel);
+      const codes = sttLangCodes(false);
+      if(/^gpt-transcribe/.test(S.sttModel)){ codes.forEach(c=>fd.append('languages[]', c)); vocabList().forEach(k=>fd.append('keywords[]', k.replace(/[<>\r\n]/g,''))); }
+      else if(codes.length===1) fd.append('language', codes[0]);
+      const j = await fetchJSON('https://api.openai.com/v1/audio/transcriptions',
+        {method:'POST', headers:{'Authorization':'Bearer '+S.keyOpenai}, body:fd}, 45000);
+      return j.text;
+    }
+  },
+  stop(){ if(this.len) this.flush(); this.pre=[]; }
+};
+
+/* ============ 開始・停止 ============ */
+let engine = null;
+$('mic').onclick = async ()=>{
+  if(running){ stop(); return; }
+  showWarn('');
+  if(!navigator.mediaDevices?.getUserMedia){ showWarn('このブラウザ（またはhttp接続）ではマイクが使えません。https のURLで開いてください。'); return; }
+  try{
+    running = true; $('mic').classList.add('rec'); $('mic').textContent='■ 停止';
+    await startAudio();
+    engine = S.sttEngine==='gemini-live' ? LiveEngine : ChunkEngine;
+    await engine.start();
+  }catch(e){
+    showWarn(e.message || String(e)); setState('エラー','err'); stop(true);
+  }
+};
+function stop(keepState){
+  running=false;
+  try{ engine && engine.stop(); }catch(e){}
+  engine=null; stopAudio();
+  $('mic').classList.remove('rec'); $('mic').textContent='● 聞き取り開始';
+  if(!keepState) setState('待機中','');
+}
+
+/* ============ キー接続テスト ============ */
+$('btnKeyCheck').onclick = async ()=>{
+  const out=$('keyCheckOut'); out.textContent='テスト中…';
+  const res=[];
+  const test = async (name, fn)=>{ try{ await fn(); res.push('✅ '+name); }catch(e){ res.push('❌ '+name+': '+e.message); } out.innerHTML = res.map(esc).join('<br>'); };
+  if(S.keyGemini) await test('Gemini', ()=>fetchJSON('https://generativelanguage.googleapis.com/v1beta/models?key='+encodeURIComponent(S.keyGemini),{},15000));
+  if(S.keyOpenai) await test('OpenAI', ()=>fetchJSON('https://api.openai.com/v1/models',{headers:{'Authorization':'Bearer '+S.keyOpenai}},15000));
+  if(S.keyClaude) await test('Claude', ()=>fetchJSON('https://api.anthropic.com/v1/models',{headers:{'x-api-key':S.keyClaude,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'}},15000));
+  if(S.keyGct) await test('Google翻訳', ()=>fetchJSON('https://translation.googleapis.com/language/translate/v2?key='+encodeURIComponent(S.keyGct),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:'নমস্কাৰ',source:'as',target:'ja',format:'text'})},15000));
+  if(!res.length) out.textContent='APIキーが入力されていません';
+};
+
+/* ============ 初期化 ============ */
+syncSettingsUI();
+if(location.protocol==='file:') showWarn('ファイルを直接開いています。iPhoneでマイクを使うには https のURLで開いてください。');
+if(!S.keyGemini && !S.keyOpenai) setTimeout(()=>$('settings').classList.add('open'), 300);
+</script>
+</body>
+</html>
