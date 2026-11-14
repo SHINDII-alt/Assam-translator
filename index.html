@@ -58,6 +58,7 @@ header{gap:6px}
 #paneTr .seg{font-size:calc(var(--fs)*22px);line-height:1.6;font-weight:600}
 #paneTr .seg .en{display:block;font-size:calc(var(--fs)*16px);font-weight:500;color:#bfe3ff;
   margin-top:6px;padding-top:5px;border-top:1px dashed rgba(255,255,255,.12)}
+#paneTr .seg.drafting{color:var(--draft);font-weight:500}
 #paneTr .seg.pending{color:var(--interim);font-weight:400;font-size:calc(var(--fs)*15px)}
 #paneTr .seg .err{color:var(--err);font-size:13px;font-weight:400}
 .cursor::after{content:"▍";color:var(--accent);animation:blink 1s steps(1) infinite;margin-left:1px}
@@ -415,9 +416,9 @@ function setTrTail(r){
 
 /* ============ 記録 ============ */
 const entries = []; // {i,t,src,ja,en,err,streaming,srcEl,trEl}
-function addEntry(src, meta){
+function addEntry(src, meta, draft){
   $('emptyMsg').style.display='none';
-  const e = {i:entries.length, t:now(), src, ja:null, en:null, err:null, streaming:false, meta:meta||''};
+  const e = {i:entries.length, t:now(), src, ja:null, en:null, err:null, streaming:false, meta:meta||'', draft:draft||null};
   e.srcEl = document.createElement('div'); e.srcEl.className='seg';
   e.srcEl.innerHTML = `<span class="t">${e.t}</span>${esc(brk(src))}`;
   e.trEl = document.createElement('div'); e.trEl.className='seg';
@@ -441,6 +442,18 @@ function linkTo(e, where){
 function renderEntry(e){
   const want=S.target, el=e.trEl;
   if(e.err){ el.className='seg'; el.innerHTML = `<span class="err">翻訳エラー: ${esc(e.err)}</span>`; trScroll.bottom(); return; }
+  // 正式な訳が仮訳の長さに追いつくまでは、仮訳をそのまま表示しておく（消えない）
+  if(e.draft && !e.done && !e.err){
+    const main = r => want==='en' ? (r.en||'') : (r.ja||'');
+    if(main(e).length < main(e.draft).length){
+      el.className='seg drafting';
+      let h='';
+      if(want!=='en' && e.draft.ja) h += esc(brk(e.draft.ja));
+      if(want!=='ja' && e.draft.en) h += want==='both' ? `<span class="en">${esc(brk(e.draft.en))}</span>` : esc(brk(e.draft.en));
+      el.innerHTML = h; trScroll.bottom(); return;
+    }
+  }
+  if(e.done) e.draft = null;
   const hasJa = e.ja!=null && e.ja!=='', hasEn = e.en!=null && e.en!=='';
   if(!hasJa && !hasEn){
     el.className='seg pending' + (e.streaming?' cursor':'');
@@ -484,7 +497,7 @@ async function pumpTr(){
       if(S.target!=='en' && e.ja==null) e.ja='';
       if(S.target!=='ja' && e.en==null) e.en='';
     }catch(err){ e.err = err.message||String(err); }
-    e.streaming = false; renderEntry(e);
+    e.streaming = false; e.done = true; renderEntry(e);
   }
   trBusy = false;
 }
@@ -609,15 +622,18 @@ const Draft = {
   start(){ this.stop(); this.timer = setInterval(()=>this.tick(), 250); this.lastAt=0; },
   stop(){ clearInterval(this.timer); this.timer=null; this.clear(); },
   update(src){ this.text = src||''; },
-  clear(){ this.gen++; try{ this.ctl && this.ctl.abort(); }catch(e){} this.ctl=null; this.inflight=false; this.text=''; this.lastSent=''; setTrTail(null); },
+  clear(){ this.gen++; try{ this.ctl && this.ctl.abort(); }catch(e){} this.ctl=null; this.inflight=false; this.text=''; this.lastSent=''; this.lastResult=null; setTrTail(null); },
+  // 確定時：表示中の仮訳を取り出してから消す（確定エントリに引き継ぐ）
+  take(){ const r=this.lastResult; this.clear(); return r; },
   tick(){
     if(S.draftOn!=='on' || this.inflight || !this.text) return;
     if(this.text === this.lastSent || this.text.length < 4) return;
     if(Date.now() - (this.lastAt||0) < S.draftSec*1000) return;
     this.lastAt = Date.now(); this.lastSent = this.text; this.inflight = true;
     const gen = this.gen, ctl = new AbortController(); this.ctl = ctl;
-    translateStream(this.text, contextBefore({}), p=>{ if(gen===this.gen) setTrTail(p); }, ctl.signal, true)
-      .then(r=>{ if(gen===this.gen) setTrTail(r); })
+    // 途中経過は表示せず、完成した仮訳だけを一度に差し替える（画面が消えない）
+    translateStream(this.text, contextBefore({}), null, ctl.signal, true)
+      .then(r=>{ if(gen===this.gen && (r.ja||r.en)){ this.lastResult = r; setTrTail(r); } })
       .catch(()=>{})
       .finally(()=>{ if(gen===this.gen){ this.inflight=false; this.ctl=null; } });
   }
@@ -754,8 +770,9 @@ const LiveEngine = {
         }
         if(sc?.inputTranscription){
           const t = (sc.inputTranscription.text||'').trim();
-          this.interimText=''; setSrcTail(''); Draft.clear();
-          if(t){ const e = addEntry(t, sc.inputTranscription.languageCode||''); requestTranslation(e); }
+          this.interimText=''; setSrcTail('');
+          const carry = Draft.take();
+          if(t){ const e = addEntry(t, sc.inputTranscription.languageCode||'', carry); requestTranslation(e); }
         }
         if(m.goAway && !this.rotating) this.rotate();
         if(m.error){ showWarn('Gemini: ' + (m.error.message||JSON.stringify(m.error))); }
@@ -789,8 +806,8 @@ const LiveEngine = {
     this.closing=true; clearInterval(this.timer); clearTimeout(this.reconnectTimer);
     const ws=this.ws; this.ws=null;
     try{ if(ws && ws.readyState===1){ ws.send(JSON.stringify({realtimeInput:{audioStreamEnd:true}})); setTimeout(()=>ws.close(),1500); } else ws && ws.close(); }catch(e){}
-    Draft.stop();
-    if(this.interimText){ const e=addEntry(this.interimText,'途中'); requestTranslation(e); }
+    const carry = Draft.lastResult; Draft.stop();
+    if(this.interimText){ const e=addEntry(this.interimText,'途中', carry); requestTranslation(e); }
     this.interimText=''; setSrcTail(''); $('chipTimer').style.display='none'; this.sessionStart=0;
   }
 };
