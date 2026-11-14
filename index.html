@@ -276,7 +276,7 @@ textarea{min-height:64px}
       <button class="btn ghost" id="btnKeyCheck">キー接続テスト</button>
     </div>
     <div class="hint" id="keyCheckOut"></div>
-    <div class="hint" style="margin-top:14px;opacity:.7">版：2026-11-15c 取りこぼし対策</div>
+    <div class="hint" style="margin-top:14px;opacity:.7">版：2026-11-15d 日本語の除外強化</div>
     <div class="hint" style="margin-top:14px">医療面談で使う場合は、相手の同意を得て、重要な判断に関わる内容は必ず人（通訳者）が確認してください。AIの翻訳は誤る可能性があります。</div>
   </div>
 </div>
@@ -621,7 +621,7 @@ $('btnClear').onclick = ()=>{
   clearScreen(); archive.length=0; $('emptyMsg').style.display='';
 };
 $('btnExport').onclick = ()=>{
-  const all = archive.concat(entries);
+  const all = archive.concat(entries).filter(e=>!e.skipped);
   if(!all.length){ alert('まだ記録がありません'); return; }
   const txt = all.map(e=>`[${e.t}]\nAS: ${e.src}` + (e.ja?`\nJA: ${e.ja}`:'') + (e.en?`\nEN: ${e.en}`:'')).join('\n\n');
   const name = 'assam_translation_' + new Date().toISOString().slice(0,16).replace(/[:T]/g,'-') + '.txt';
@@ -641,11 +641,22 @@ function pumpTr(){
     runTranslation(e).finally(()=>{ trActive--; pumpTr(); });
   }
 }
+// 翻訳AIが「日本語の音をアッサム文字で書いたもの」と判定した印
+function isJaFlag(r){ return [r?.ja, r?.en].some(x=>/^\s*\[?JA\]?\s*$/i.test(String(x||'')) && String(x||'').trim()!==''); }
+function looksLikeFlagStart(r){ return [r?.ja, r?.en].some(x=>/^\s*\[(J|JA)?\]?\s*$/i.test(String(x||'')) && String(x||'').trim()!==''); }
+function dropEntry(e){
+  e.skipped = true;
+  try{ e.srcEl.remove(); e.trEl.remove(); }catch(_){}
+  const i = entries.indexOf(e); if(i>=0) entries.splice(i,1);
+  $('srcCount').textContent = entries.length ? entries.length + ' 件' : '';
+  const last = entries[entries.length-1]; if(last){ last.srcEl.classList.add('latest'); last.trEl.classList.add('latest'); last.srcEl.classList.remove('old'); last.trEl.classList.remove('old'); }
+}
 async function runTranslation(e){
   {
     e.streaming = true; e.t0 = performance.now(); e.wait = (e.t0 - (e.tq||e.t0))/1000; renderEntry(e);
     try{
-      const r = await translateStream(e.src, contextBefore(e), p=>{ e.ja=p.ja??e.ja; e.en=p.en??e.en; renderEntry(e); });
+      const r = await translateStream(e.src, contextBefore(e), p=>{ if(looksLikeFlagStart(p)) return; e.ja=p.ja??e.ja; e.en=p.en??e.en; renderEntry(e); });
+      if(isJaFlag(r)){ dropEntry(e); return; }     // 日本語（通訳の声）だったので表示しない
       e.ja = r.ja ?? null; e.en = r.en ?? null;
       if(S.target!=='en' && e.ja==null) e.ja='';
       if(S.target!=='ja' && e.en==null) e.en='';
@@ -657,7 +668,7 @@ async function runTranslation(e){
 }
 function contextBefore(e){
   const i = entries.indexOf(e);
-  return entries.slice(Math.max(0,i-4), i<0?entries.length:i).map(x=>x.src).join('\n');
+  return entries.slice(Math.max(0,i-4), i<0?entries.length:i).filter(x=>!x.skipped).map(x=>x.src).join('\n');
 }
 function trPrompt(text, prev, partial){
   const want = S.target;
@@ -669,6 +680,7 @@ function trPrompt(text, prev, partial){
     'The source is real-time speech recognition output: it may contain recognition errors, missing punctuation, or code-mixed English/Hindi words. Infer the intended meaning, but do not invent content.',
     partial ? 'The speaker is still talking, so the text may end mid-sentence. Translate what is there so far; do not complete the sentence.' : '',
     'If the text is already English or Hindi, still translate it to the target language(s).',
+    'JAPANESE CHECK: a Japanese interpreter is also speaking, and the recognizer may write that Japanese speech phonetically in Assamese/Bengali script (e.g. ৱাতাছি ৱা = watashi wa, আৰিগাতো = arigatou, ছুমিমাছেন = sumimasen, দেছু / মাছু = desu / masu, ছোও দেছু নে = sou desu ne). If the text is mostly such phonetic Japanese rather than real Assamese, output exactly [JA] and nothing else.',
     'IMPORTANT: English (and Hindi) words are often written phonetically in Assamese/Bengali script by the recognizer (e.g. চেনেল = channel, টেষ্ট = test, ডাক্তাৰ = doctor, মেডিচিন = medicine). Recognize such loanwords by their sound and translate them by their English meaning.',
     'If the input is empty noise or meaningless, output nothing.',
     S.context ? 'Situation: ' + S.context : '',
@@ -810,7 +822,7 @@ const Draft = {
     const gen = this.gen, ctl = new AbortController(); this.ctl = ctl;
     // 途中経過は表示せず、完成した仮訳だけを一度に差し替える（画面が消えない）
     translateStream(this.text, contextBefore({}), null, ctl.signal, true)
-      .then(r=>{ if(gen===this.gen && (r.ja||r.en)){ this.lastResult = r; setTrTail(r); } })
+      .then(r=>{ if(gen!==this.gen) return; if(isJaFlag(r)){ this.lastResult=null; setTrTail(null); return; } if(r.ja||r.en){ this.lastResult = r; setTrTail(r); } })
       .catch(err=>{
         // 回数制限（429）や混雑（503）なら、仮訳を20秒休んで本番の翻訳に回数を残す
         if(/^(429|503)/.test(err?.message||'')){ this.pauseUntil = Date.now()+20000;
