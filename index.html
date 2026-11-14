@@ -59,6 +59,9 @@ header{gap:6px}
 .seg.latest{border-left-color:var(--accent);background:rgba(255,255,255,.035)}
 .seg.hl{background:rgba(45,143,213,.2);opacity:1}
 #paneSrc .seg{font-size:calc(var(--fs)*16px);line-height:1.65;color:#cfd8e0}
+#paneSrc .seg .orig{color:#e3e9ee}
+#paneSrc .seg .srcen{font-size:.88em;color:#9fc3dd;margin-top:3px}
+#paneSrc .seg .srcen .tag,#paneSrc .seg .orig .tag{font-size:10px;color:var(--sub);border:1px solid var(--line);border-radius:4px;padding:0 4px;margin-right:6px;vertical-align:middle}
 #paneSrc .seg .t{display:block;font-size:10px;color:var(--sub);margin-bottom:1px;letter-spacing:.04em}
 #paneTr .seg{font-size:calc(var(--fs)*22px);line-height:1.6;font-weight:600}
 #paneTr .seg .en{display:block;font-size:calc(var(--fs)*16px);font-weight:500;color:#bfe3ff;
@@ -212,8 +215,10 @@ textarea{min-height:64px}
     <select id="sttLang">
       <option value="as+en+hi">アッサム語＋英語・ヒンディー語混じり（おすすめ）</option>
       <option value="as">アッサム語のみ（英語が混じらない会話向け）</option>
+      <option value="translate">英語に翻訳して出力（Sarvam専用・英語混じりの会話向け）</option>
       <option value="auto">自動判定</option>
     </select>
+    <div class="hint">「英語に翻訳して出力」は、Sarvam が音声から直接英語の文章を作り、それを翻訳AIが日本語にします。英語がアッサム文字で書かれてしまう問題を避けられます。アッサム語の原文も同時に書き起こして残すため、Sarvam の料金は約2倍になります。</div>
 
     <h3>② 翻訳（アッサム語 → 日本語・英語）</h3>
     <label>エンジン</label>
@@ -282,7 +287,7 @@ textarea{min-height:64px}
       <button class="btn ghost" id="btnKeyCheck">キー接続テスト</button>
     </div>
     <div class="hint" id="keyCheckOut"></div>
-    <div class="hint" style="margin-top:14px;opacity:.7">版：2026-11-15e 遅延表示</div>
+    <div class="hint" style="margin-top:14px;opacity:.7">版：2026-11-15g 原文も保存</div>
     <div class="hint" style="margin-top:14px">医療面談で使う場合は、相手の同意を得て、重要な判断に関わる内容は必ず人（通訳者）が確認してください。AIの翻訳は誤る可能性があります。</div>
   </div>
 </div>
@@ -411,7 +416,7 @@ function updateChips(){
   $('chipTr').textContent  = '翻訳: ' + (S.trEngine==='google' ? 'Google翻訳' : S.trModel);
   document.querySelectorAll('#targetSeg button').forEach(b=>b.classList.toggle('sel', b.dataset.v===S.target));
   const sttName = {'gemini-live':'Gemini','gemini-chunk':'Gemini','sarvam-live':'Sarvam','sarvam-chunk':'Sarvam','openai-chunk':'OpenAI'}[S.sttEngine]||'';
-  $('srcHead').textContent = '🎙 聞き取り（' + ({as:'アッサム語のみ','as+en+hi':'アッサム語＋英語・ヒンディー語',auto:'自動判定'}[S.sttLang]||'アッサム語') + (sttName?' · '+sttName:'') + '）';
+  $('srcHead').textContent = '🎙 聞き取り（' + ({as:'アッサム語のみ','as+en+hi':'アッサム語＋英語・ヒンディー語',translate:'英語訳',auto:'自動判定'}[S.sttLang]||'アッサム語') + (sttName?' · '+sttName:'') + '）';
   $('trHead').textContent = '🌐 翻訳（' + ({ja:'日本語',en:'English',both:'日本語＋English'}[S.target]) + '）';
 }
 document.querySelectorAll('#targetSeg button').forEach(b=>b.onclick=()=>{ S.target=b.dataset.v; saveSettings(); updateChips(); });
@@ -427,7 +432,8 @@ function vocabList(){ return S.vocab.split(/\n+/).map(s=>s.trim()).filter(Boolea
 function sttLangCodes(bcp){ // bcp=true → as-IN style
   if(S.sttLang==='auto') return [];
   const m = bcp ? {as:'as-IN',en:'en-IN',hi:'hi-IN'} : {as:'as',en:'en',hi:'hi'};
-  return S.sttLang.split('+').map(x=>m[x]);
+  const lang = S.sttLang==='translate' ? 'as+en+hi' : S.sttLang;   // 英語訳モードは Sarvam 専用。他のエンジンでは混じり扱い
+  return lang.split('+').map(x=>m[x]).filter(Boolean);
 }
 /* 書き起こしの言語フィルター
    ・日本語（通訳の声など）は常に除外
@@ -439,6 +445,7 @@ function cleanTranscript(text, lang){
   lang = String(lang||'').toLowerCase();
   if(/^ja/.test(lang)) return '';
   t = t.replace(RE_JA, ' ');
+  if(S.sttLang==='translate'){ t = t.replace(/\s{2,}/g,' ').trim(); return /[\p{L}]/u.test(t) ? t : ''; }
   if(S.sttLang==='as'){
     if(lang && !/^(as|bn)/.test(lang)) return '';           // 英語・ヒンディー語と判定されたもの
     t = t.replace(RE_DEVA, ' ');                               // ヒンディー語の文字
@@ -586,6 +593,20 @@ function setLabel(e){
   if(e.lat!=null) parts.push(`翻訳 ${latHtml(e.lat + (e.wait||0))}` + (e.wait>0.3 ? `（うち待ち ${e.wait.toFixed(1)}秒）` : ''));
   tEl.innerHTML = parts.join(' · ');
 }
+/* 上段の表示：英語訳モードではアッサム語の原文と Sarvam の英語訳を2段で表示 */
+function renderSrc(e){
+  const body = e.orig!=null
+    ? `<div class="orig"><span class="tag">原文</span>${e.orig ? esc(brk(e.orig)) : '<span style="opacity:.5">…</span>'}</div><div class="srcen"><span class="tag">EN</span>${esc(brk(e.src))}</div>`
+    : esc(brk(e.src));
+  e.srcEl.innerHTML = `<span class="t"></span>${body}`;
+  setLabel(e);
+}
+function cleanOrig(t){ return String(t||'').replace(RE_JA,' ').replace(/\s{2,}/g,' ').trim(); }
+function attachOrig(e, text){
+  text = cleanOrig(text); if(!e || e.skipped) return;
+  e.orig = e.orig ? (text ? e.orig + ' ' + text : e.orig) : text;
+  renderSrc(e); srcScroll.bottom();
+}
 function addEntry(src, meta, draft, stt){
   $('emptyMsg').style.display='none';
   const e = {i:entries.length, tq:performance.now(), t:now(), src, ja:null, en:null, err:null, streaming:false, meta:meta||'', draft:draft||null};
@@ -657,7 +678,8 @@ $('btnClear').onclick = ()=>{
 $('btnExport').onclick = ()=>{
   const all = archive.concat(entries).filter(e=>!e.skipped);
   if(!all.length){ alert('まだ記録がありません'); return; }
-  const txt = all.map(e=>`[${e.t}]\nAS: ${e.src}` + (e.ja?`\nJA: ${e.ja}`:'') + (e.en?`\nEN: ${e.en}`:'')).join('\n\n');
+  const txt = all.map(e=>`[${e.t}]\n` + (e.orig!=null ? `AS（原文）: ${e.orig}\nEN（Sarvam訳）: ${e.src}` : `AS: ${e.src}`)
+    + (e.ja?`\nJA: ${e.ja}`:'') + (e.en && !(e.orig!=null && e.en===e.src)?`\nEN: ${e.en}`:'')).join('\n\n');
   const name = 'assam_translation_' + new Date().toISOString().slice(0,16).replace(/[:T]/g,'-') + '.txt';
   const blob = new Blob([txt], {type:'text/plain'});
   const file = new File([blob], name, {type:'text/plain'});
@@ -704,8 +726,21 @@ function contextBefore(e){
   const i = entries.indexOf(e);
   return entries.slice(Math.max(0,i-4), i<0?entries.length:i).filter(x=>!x.skipped).map(x=>x.src).join('\n');
 }
-function trPrompt(text, prev, partial){
-  const want = S.target;
+function trPrompt(text, prev, partial, want=S.target, fromEnglish=false){
+  if(fromEnglish) return [
+    'You are a professional medical interpreter. Translate the following English transcript into natural, accurate Japanese.',
+    'The English was produced by a speech AI that translated spoken Assamese (sometimes mixed with English/Hindi) into English in real time, so it may contain recognition errors; infer the intended meaning but do not invent content.',
+    "Preserve the speaker's exact meaning, including numbers, negations, medical terms, uncertainties, and conditions. Do not summarize, add information, or omit details.",
+    partial ? 'The speaker is still talking, so the text may end mid-sentence. Translate what is there so far; do not complete the sentence.' : '',
+    'JAPANESE CHECK: a Japanese interpreter is also speaking; if the text is a garbled rendering of Japanese speech rather than real content, output exactly [JA] and nothing else.',
+    'If the input is empty noise or meaningless, output nothing.',
+    S.context ? 'Situation: ' + S.context : '',
+    vocabList().length ? 'Key terms: ' + vocabList().join(', ') : '',
+    prev ? 'Previous utterances (context only, do not translate):\n' + prev : '',
+    'Output only the Japanese translation.',
+    '',
+    'English text to translate:\n' + text
+  ].filter(Boolean).join('\n');
   const out = want==='both'
     ? 'Output exactly two lines and nothing else:\nJA: <Japanese translation>\nEN: <English translation>'
     : `Output ONLY the ${want==='ja'?'Japanese':'English'} translation, nothing else.`;
@@ -725,15 +760,15 @@ function trPrompt(text, prev, partial){
     'Assamese text to translate:\n' + text
   ].filter(Boolean).join('\n');
 }
-function parseTrOut(raw){
+function parseTrOut(raw, want=S.target){
   raw = (raw||'').replace(/^```[a-z]*\n?|```\s*$/g,'').trim();
-  if(S.target==='both'){
+  if(want==='both'){
     const ja = raw.match(/JA\s*[:：]\s*([\s\S]*?)(?=\n\s*EN\s*[:：]|$)/);
     const en = raw.match(/EN\s*[:：]\s*([\s\S]*)$/);
     if(ja || en) return {ja: ja?ja[1].trim():'', en: en?en[1].trim():''};
     return {ja:raw, en:''};
   }
-  return S.target==='ja' ? {ja:raw} : {en:raw};
+  return want==='ja' ? {ja:raw} : {en:raw};
 }
 async function fetchJSON(url, opt, timeoutMs=30000){
   const ctl = new AbortController(); const to = setTimeout(()=>ctl.abort(), timeoutMs);
@@ -792,22 +827,32 @@ function EP(svc, path, headers={}){
 }
 
 async function translateStream(text, prev, onPartial, signal, partial){
+  // 「英語に翻訳して出力」モード：Sarvam の英語をそのまま使い、日本語だけ翻訳AIに頼む
+  const fromEnglish = S.sttLang==='translate' && !/[\u0980-\u09FF]/.test(text);
+  if(fromEnglish){
+    if(S.target==='en') return {en:text};
+    const r = await translateCore(text, prev, onPartial && (p=>onPartial(S.target==='both'?{ja:p.ja, en:text}:p)), signal, partial, 'ja', true);
+    return S.target==='both' ? {ja:r.ja, en:text} : r;
+  }
+  return translateCore(text, prev, onPartial, signal, partial, S.target, false);
+}
+async function translateCore(text, prev, onPartial, signal, partial, want, fromEnglish){
   const eng = S.trEngine, model = S.trModel;
   if(eng==='google'){
     const one = async tgt => {
       const ep = EP('translate', '', {'Content-Type':'application/json'});
       const j = await fetchJSON(ep.url,
-        {method:'POST', headers:ep.headers, signal, body:JSON.stringify({q:text, source:'as', target:tgt, format:'text', model:'nmt'})});
+        {method:'POST', headers:ep.headers, signal, body:JSON.stringify({q:text, source:fromEnglish?'en':'as', target:tgt, format:'text', model:'nmt'})});
       return decodeHTML(j.data.translations[0].translatedText);
     };
     const r = {};
-    const [ja, en] = await Promise.all([S.target!=='en'?one('ja'):null, S.target!=='ja'?one('en'):null]);
+    const [ja, en] = await Promise.all([want!=='en'?one('ja'):null, want!=='ja'?one('en'):null]);
     if(ja!=null) r.ja=ja; if(en!=null) r.en=en;
     return r;
   }
-  const prompt = trPrompt(text, prev, partial);
+  const prompt = trPrompt(text, prev, partial, want, fromEnglish);
   let acc = '', streamErr = null;
-  const push = t=>{ if(!t) return; acc += t; onPartial && onPartial(parseTrOut(acc)); };
+  const push = t=>{ if(!t) return; acc += t; onPartial && onPartial(parseTrOut(acc, want)); };
   if(eng==='gemini'){
     const ep = EP('gemini', `v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`, {'Content-Type':'application/json'});
     await streamSSE(ep.url,
@@ -829,7 +874,7 @@ async function translateStream(text, prev, onPartial, signal, partial){
            if(j.type==='content_block_delta' && j.delta?.type==='text_delta') push(j.delta.text); }, signal);
   } else throw new Error('不明な翻訳エンジン');
   if(streamErr && !acc) throw new Error(streamErr);
-  return parseTrOut(acc);
+  return parseTrOut(acc, want);
 }
 function geminiText(j){
   const parts = j?.candidates?.[0]?.content?.parts || [];
@@ -1062,14 +1107,52 @@ const LiveEngine = {
 const SarvamLive = {
   ws:null, ready:false, closing:false, interimText:'', sendBuf:[], sendLen:0, pingTimer:null, noMode:false, reconnectTimer:null,
   parts:new Map(), curIdx:null,
+  aux:null, origBuf:[], lastEntry:null, lastEntryAt:0,
+  // 発言を記録（英語訳モードでは、届いている原文を結び付ける）
+  emit(text, meta, carry){
+    const e = addEntry(text, meta, carry);
+    if(S.sttLang==='translate'){
+      e.orig = this.origBuf.join(' '); this.origBuf = []; renderSrc(e);
+      this.lastEntry = e; this.lastEntryAt = performance.now();
+    }
+    requestTranslation(e);
+    return e;
+  },
   commitStale(idx){
     if(!this.parts.has(idx)) return;               // 確定版が届いていれば何もしない
     const text = this.parts.get(idx); this.parts.delete(idx);
-    if(text){ const e = addEntry(text, 'Sarvam'); requestTranslation(e); }
+    if(text) this.emit(text, 'Sarvam');
+  },
+  /* 英語訳モード：原文（アッサム語）用にもう1本 Sarvam をつなぐ */
+  openAux(){
+    const q = new URLSearchParams({language_code:'as-IN', model: this.v3Fallback ? 'saaras:v3-realtime' : S.sttModel,
+      stream_type:'balanced', sample_rate:'16000', encoding:'linear16'});
+    const v = vocabList().slice(0,50).map(x=>x.slice(0,64));
+    if(v.length && /v4/.test(S.sttModel) && !this.v3Fallback) q.set('keyterms', JSON.stringify(v));
+    let ws;
+    try{
+      if(TEAM()){ q.set('pw', S.teamPass); ws = new WebSocket(teamBase().replace(/^http/,'ws') + '/sarvam-live?' + q); }
+      else ws = new WebSocket('wss://api.sarvam.ai/speech-to-text-realtime/ws?' + q, ['api-subscription-key.' + S.keySarvam]);
+    }catch(e){ return; }
+    this.aux = ws;
+    ws.onmessage = ev=>{
+      let m; try{ m = JSON.parse(ev.data); }catch(e){ return; }
+      const type = m.event || m.type;
+      if(type==='transcript.partial'){ this.origPartial = cleanOrig(m.text); setSrcTail(this.origPartial); }
+      if(type==='transcript.final'){
+        this.origPartial=''; setSrcTail('');
+        const text = cleanOrig(m.text); if(!text) return;
+        // 直前（2.5秒以内）に英語訳が確定した発言があれば、その原文として結び付ける
+        if(this.lastEntry && !this.lastEntry.skipped && performance.now() - this.lastEntryAt < 2500) attachOrig(this.lastEntry, text);
+        else this.origBuf.push(text);                // 英語訳がまだなら、次の発言用に取っておく
+      }
+    };
+    ws.onclose = ()=>{ if(this.aux===ws && running && !this.closing) setTimeout(()=>{ if(running && !this.closing) this.openAux(); }, 1000); };
   },
   async start(){
     needKey('keySarvam','Sarvam AI');
-    this.closing=false; this.noMode=false; this.parts = new Map(); this.curIdx = null;
+    this.closing=false; this.noMode=false; this.v3Fallback=false; this.parts = new Map(); this.curIdx = null;
+    this.aux=null; this.origBuf=[]; this.lastEntry=null; this.lastEntryAt=0; this.origPartial='';
     if(TEAM()){
       // 先にサーバーの状態を確認して、分かりやすい理由を出す
       let h;
@@ -1079,21 +1162,24 @@ const SarvamLive = {
       if(!h.sarvam) throw new Error('Cloudflare に SARVAM_API_KEY が登録されていません（Settings → Variables and Secrets）。');
     }
     await this.connect();
+    if(S.sttLang==='translate') this.openAux();
     Draft.start();
     onPCM16k = pcm=>{
       this.sendBuf.push(pcm); this.sendLen += pcm.length;
       if(this.sendLen >= 1600){ // 約100ms
         const chunk = concatI16(this.sendBuf); this.sendBuf=[]; this.sendLen=0;
-        if(this.ws && this.ws.readyState===1 && this.ready)
-          this.ws.send(JSON.stringify({event:'audio_input', audio:int16ToB64(chunk)}));
+        const msg = JSON.stringify({event:'audio_input', audio:int16ToB64(chunk)});
+        if(this.ws && this.ws.readyState===1 && this.ready) this.ws.send(msg);
+        if(this.aux && this.aux.readyState===1) this.aux.send(msg);
       }
     };
-    this.pingTimer = setInterval(()=>{ try{ if(this.ws && this.ws.readyState===1) this.ws.send(JSON.stringify({event:'ping'})); }catch(e){} }, 15000);
+    this.pingTimer = setInterval(()=>{ for(const w of [this.ws, this.aux]){ try{ if(w && w.readyState===1) w.send(JSON.stringify({event:'ping'})); }catch(e){} } }, 15000);
   },
   target(){
     const q = new URLSearchParams({language_code: S.sttLang==='auto' ? 'auto' : 'as-IN', model:S.sttModel,
       stream_type:'balanced', sample_rate:'16000', encoding:'linear16'});
     if(S.sttLang==='as+en+hi' && !this.noMode) q.set('mode','codemix');
+    if(S.sttLang==='translate'){ q.set('mode','translate'); if(this.v3Fallback) q.set('model','saaras:v3-realtime'); }
     const v = vocabList().slice(0,50).map(x=>x.slice(0,64));
     if(v.length && /v4/.test(S.sttModel)) q.set('keyterms', JSON.stringify(v));
     if(TEAM()){ q.set('pw', S.teamPass); return {url: teamBase().replace(/^http/,'ws') + '/sarvam-live?' + q}; }
@@ -1116,12 +1202,13 @@ const SarvamLive = {
           const idx = m.utterance_idx ?? 'u';
           // 前の発言の確定版が来ないまま次の発言が始まったら、少し待って途中の字幕を記録する
           if(this.curIdx!=null && idx!==this.curIdx && this.parts.has(this.curIdx)){
-            const old = this.curIdx; setTimeout(()=>this.commitStale(old), 2500);
+            const old = this.curIdx; setTimeout(()=>this.commitStale(old), S.sttLang==='translate' ? 6000 : 2500);
           }
           this.curIdx = idx;
           this.interimText = cleanTranscript(m.text, m.language);
           if(this.interimText) this.parts.set(idx, this.interimText);
-          setSrcTail(this.interimText); Draft.update(this.interimText);
+          if(!(S.sttLang==='translate' && this.aux)) setSrcTail(this.interimText);
+          Draft.update(this.interimText);
         }
         if(type==='transcript.final'){
           const idx = m.utterance_idx ?? this.curIdx ?? 'u';
@@ -1129,11 +1216,12 @@ const SarvamLive = {
           if(typeof idx==='number') for(const k of [...this.parts.keys()]) if(typeof k==='number' && k<idx) this.commitStale(k);
           const shown = this.parts.get(idx) || (idx===this.curIdx ? this.interimText : '');
           this.parts.delete(idx);
-          const tx = pickFinal(cleanTranscript(m.text, m.language), shown);
+          const fin = cleanTranscript(m.text, m.language);
+          const tx = S.sttLang==='translate' ? (fin || shown) : pickFinal(fin, shown);
           const isCurrent = idx===this.curIdx;
-          if(isCurrent){ this.interimText=''; setSrcTail(''); }
+          if(isCurrent){ this.interimText=''; if(!(S.sttLang==='translate' && this.aux)) setSrcTail(''); }
           const carry = isCurrent ? Draft.take() : null;
-          if(tx){ const e = addEntry(tx, 'Sarvam', carry); requestTranslation(e); }
+          if(tx) this.emit(tx, 'Sarvam', carry);
         }
         if(type==='error'){ showWarn('Sarvam: ' + (m.message || m.code || 'エラー')); }
       };
@@ -1145,6 +1233,8 @@ const SarvamLive = {
           settled=true;
           // mode=codemix が使えないモデルの場合は mode なしで再接続
           if(ev.code===4000 && !this.noMode && S.sttLang==='as+en+hi'){ this.noMode=true; this.connect().then(resolve, reject); return; }
+          // 翻訳モードが使えないモデルなら v3 Realtime で再接続
+          if(ev.code===4000 && S.sttLang==='translate' && !this.v3Fallback){ this.v3Fallback=true; showWarn('Saaras v4 で英語翻訳モードが使えないため、v3 Realtime に切り替えました'); this.connect().then(resolve, reject); return; }
           const why = ev.code===1003 ? '（APIキー・残高・回数制限を確認）'
             : ev.code===4000 ? '（リアルタイム機能がこのアカウントで使えない可能性。「Sarvam AI 回線が弱い時用」を試してください）'
             : ev.code===1006 ? '（接続が拒否されました。キー・残高、またはリアルタイム機能の権限を確認。「Sarvam AI 回線が弱い時用」を試してください）' : '';
@@ -1162,10 +1252,16 @@ const SarvamLive = {
     this.closing=true; clearInterval(this.pingTimer); clearTimeout(this.reconnectTimer);
     const ws=this.ws; this.ws=null;
     try{ if(ws && ws.readyState===1){ ws.send(JSON.stringify({event:'end'})); setTimeout(()=>ws.close(),1500); } else ws && ws.close(); }catch(e){}
+    const aux=this.aux; this.aux=null;
+    try{ if(aux && aux.readyState===1){ aux.send(JSON.stringify({event:'end'})); setTimeout(()=>aux.close(),1500); } else aux && aux.close(); }catch(e){}
     const carry = Draft.lastResult; Draft.stop();
-    for(const [idx, text] of this.parts){ if(text && idx!==this.curIdx){ const e=addEntry(text,'途中'); requestTranslation(e); } }
+    for(const [idx, text] of this.parts){ if(text && idx!==this.curIdx) this.emit(text,'途中'); }
     const cur = this.parts.get(this.curIdx) || this.interimText;
-    if(cur){ const e=addEntry(cur,'途中', carry); requestTranslation(e); }
+    if(cur) this.emit(cur,'途中', carry);
+    // 残っている原文は最後の発言に付ける
+    if(this.origPartial) this.origBuf.push(this.origPartial);
+    if(this.origBuf.length && this.lastEntry) attachOrig(this.lastEntry, this.origBuf.join(' '));
+    this.origBuf=[]; this.origPartial='';
     this.parts = new Map(); this.curIdx = null;
     this.interimText=''; setSrcTail('');
   }
@@ -1209,7 +1305,7 @@ const ChunkEngine = {
     const order = (this.seq = (this.seq||0)+1);
     this.pending = this.pending || new Map();
     const p = this.transcribe(pcm).then(r=>{ const o = (r && typeof r==='object') ? r : {text:r};
-        return {t: cleanTranscript(o.text, o.lang), dur:(pcm.length/16000).toFixed(1), end:speechEnd}; })
+        return {t: cleanTranscript(o.text, o.lang), dur:(pcm.length/16000).toFixed(1), end:speechEnd, orig:o.orig}; })
       .catch(err=>{ showWarn('文字起こしエラー: '+err.message); setTimeout(()=>showWarn(''),6000); return {t:''}; });
     this.pending.set(order, p);
     this.drain();
@@ -1220,7 +1316,7 @@ const ChunkEngine = {
     while(this.pending.has(this.next)){
       const r = await this.pending.get(this.next); this.pending.delete(this.next); this.next++;
       this.inflight--; this.status();
-      if(r.t && !/^\[?(silence|noise|無音)\]?$/i.test(r.t)){ const e=addEntry(r.t, r.dur+'秒', null, r.end ? (performance.now()-r.end)/1000 : null); requestTranslation(e); }
+      if(r.t && !/^\[?(silence|noise|無音)\]?$/i.test(r.t)){ const e=addEntry(r.t, r.dur+'秒', null, r.end ? (performance.now()-r.end)/1000 : null); if(r.orig!==undefined){ e.orig=''; attachOrig(e, r.orig); } requestTranslation(e); }
     }
     this.draining=false;
   },
@@ -1238,6 +1334,23 @@ const ChunkEngine = {
          body:JSON.stringify({contents:[{role:'user',parts:[{inline_data:{mime_type:'audio/wav', data:b64FromBytes(wav)}},{text:prompt}]}], generationConfig:{temperature:0}})}, 45000);
       return geminiText(j);
     } else if(S.sttEngine==='sarvam-chunk'){
+      if(S.sttLang==='translate'){
+        // 英語訳と原文（アッサム語）を同時に頼む。同じ音声なので必ず対応する
+        const one = (mode, model=S.sttModel) => {
+          const fd = new FormData();
+          fd.append('file', new Blob([wav],{type:'audio/wav'}), 'speech.wav');
+          fd.append('model', model); fd.append('language_code', 'as-IN');
+          if(mode) fd.append('mode', mode);
+          const v = vocabList().slice(0,50).map(x=>x.slice(0,64));
+          if(v.length && /v4/.test(model)) fd.append('keyterms', JSON.stringify(v));
+          const ep = EP('sarvam', 'speech-to-text');
+          return fetchJSON(ep.url, {method:'POST', headers:ep.headers, body:fd}, 45000);
+        };
+        const tr = one('translate').catch(e=>{ if(/^(400|422)/.test(e.message) && S.sttModel!=='saaras:v3') return one('translate','saaras:v3'); throw e; });
+        const og = one(null).catch(()=>null);
+        const [a, b] = await Promise.all([tr, og]);
+        return {text:a.transcript, lang:a.language_code, orig: b ? (b.transcript||'') : ''};
+      }
       const send = async withMode => {
         const fd = new FormData();
         fd.append('file', new Blob([wav],{type:'audio/wav'}), 'speech.wav');
@@ -1251,7 +1364,10 @@ const ChunkEngine = {
       };
       let j;
       try{ j = await send(true); }
-      catch(e){ if(/^(400|422)/.test(e.message) && S.sttLang==='as+en+hi') j = await send(false); else throw e; }
+      catch(e){
+        if(/^(400|422)/.test(e.message) && S.sttLang==='as+en+hi') j = await send(false);
+ else throw e;
+      }
       return {text:j.transcript, lang:j.language_code};
     } else {
       const fd = new FormData();
