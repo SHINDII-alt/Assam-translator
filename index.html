@@ -72,7 +72,12 @@ header{gap:6px}
 .cursor::after{content:"▍";color:var(--accent);animation:blink 1s steps(1) infinite;margin-left:1px}
 @keyframes blink{50%{opacity:0}}
 .tail{min-height:1.4em}
-#srcTail{font-size:calc(var(--fs)*16px);line-height:1.65;color:var(--interim);font-style:italic}
+#srcTail{font-size:calc(var(--fs)*17px);line-height:1.65;color:#dfe7ee;font-weight:500;padding:6px 10px;margin-bottom:4px;
+  border-left:3px solid var(--accent2);border-radius:8px;background:rgba(45,143,213,.08)}
+#srcTail:empty{display:none}
+#srcTail.live::after{content:"▍";color:var(--accent2);animation:blink 1s steps(1) infinite;margin-left:2px}
+#srcTail.live::before{content:"LIVE";font-size:9px;font-weight:700;letter-spacing:.08em;color:#fff;background:var(--accent2);
+  border-radius:3px;padding:1px 4px;margin-right:7px;vertical-align:middle}
 #trTail{font-size:calc(var(--fs)*20px);line-height:1.6;color:var(--draft);font-weight:500}
 #trTail .en{display:block;font-size:calc(var(--fs)*15px);color:#8fb2c8;margin-top:4px}
 .jump{position:absolute;right:12px;bottom:10px;background:var(--accent2);color:#fff;border:0;border-radius:999px;
@@ -211,6 +216,13 @@ textarea{min-height:64px}
     <select id="sttModelSel"></select>
     <input id="sttModel" autocomplete="off" autocapitalize="off" placeholder="モデルIDを入力" style="display:none;margin-top:6px">
     <div class="hint" id="sttHint"></div>
+    <div id="sarvamSpeedBox">
+      <label>Sarvam の速さ</label>
+      <select id="sarvamSpeed">
+        <option value="fast">速さ優先（字幕が早く出る）</option>
+        <option value="balanced">バランス（精度と速さの中間）</option>
+      </select>
+    </div>
     <label>言語</label>
     <select id="sttLang">
       <option value="as+en+hi">アッサム語＋英語・ヒンディー語混じり（おすすめ）</option>
@@ -287,7 +299,7 @@ textarea{min-height:64px}
       <button class="btn ghost" id="btnKeyCheck">キー接続テスト</button>
     </div>
     <div class="hint" id="keyCheckOut"></div>
-    <div class="hint" style="margin-top:14px;opacity:.7">版：2026-11-15g 原文も保存</div>
+    <div class="hint" style="margin-top:14px;opacity:.7">版：2026-11-15h ライブ字幕</div>
     <div class="hint" style="margin-top:14px">医療面談で使う場合は、相手の同意を得て、重要な判断に関わる内容は必ず人（通訳者）が確認してください。AIの翻訳は誤る可能性があります。</div>
   </div>
 </div>
@@ -333,7 +345,7 @@ const MODEL_LABELS = {
 };
 const DEFAULTS = {
   sttEngine:'gemini-live', sttModel:'', sttLang:'as+en+hi', silenceSec:0.8, maxSec:12, vadThresh:0.012,
-  trEngine:'gemini', trModel:'', target:'ja', draftOn:'on', draftSec:1.5, scrollSpeed:'normal', context:'', vocab:'',
+  trEngine:'gemini', trModel:'', target:'ja', draftOn:'on', draftSec:1.5, scrollSpeed:'normal', sarvamSpeed:'fast', context:'', vocab:'',
   keyGemini:'', keyOpenai:'', keyClaude:'', keyGct:'', keySarvam:'', mode:'own', serverUrl:'', teamPass:'',
 };
 const LS = 'assamTranslator.v1';
@@ -350,7 +362,7 @@ function loadSettings(){
 function saveSettings(){ try{ localStorage.setItem(LS, JSON.stringify(S)); }catch(e){} }
 
 const $ = id => document.getElementById(id);
-const FIELDS = ['sttEngine','sttModel','sttLang','trEngine','trModel','draftOn','draftSec','scrollSpeed','context','vocab','keyGemini','keyOpenai','keyClaude','keyGct','keySarvam','mode','serverUrl','teamPass'];
+const FIELDS = ['sttEngine','sttModel','sttLang','trEngine','trModel','draftOn','draftSec','scrollSpeed','sarvamSpeed','context','vocab','keyGemini','keyOpenai','keyClaude','keyGct','keySarvam','mode','serverUrl','teamPass'];
 
 /* モデルのプルダウン（一覧から選択＋「その他（手入力）」） */
 function fillModelSelect(selId, inputId, list, cur){
@@ -379,6 +391,7 @@ function syncSettingsUI(){
   fillModelSelect('trModelSel','trModel', tm.list, S.trModel);
   $('trHint').textContent = tm.hint;
   $('teamBox').style.display = TEAM() ? '' : 'none';
+  $('sarvamSpeedBox').style.display = S.sttEngine==='sarvam-live' ? '' : 'none';
   $('ownBox').style.display  = TEAM() ? 'none' : '';
   updateChips();
 }
@@ -554,7 +567,15 @@ function makeScroller(bodyId, jumpId){
 })();
 const srcScroll = makeScroller('srcBody','srcJump');
 const trScroll  = makeScroller('trBody','trJump');
-function setSrcTail(text){ $('srcTail').textContent = brk(text||''); srcScroll.bottom(); }
+const LIVE_ENGINES = ['gemini-live','sarvam-live'];
+function setSrcTail(text){
+  const el = $('srcTail'), was = el.textContent;
+  el.textContent = brk(text||'');
+  const live = !!text && LIVE_ENGINES.includes(S.sttEngine) && running;
+  el.classList.toggle('live', live);
+  if(live && !was) FirstCap.mark();               // 最初の字幕が出た瞬間
+  srcScroll.bottom();
+}
 function setTrTail(r){
   const el=$('trTail');
   if(!r){ el.innerHTML=''; return; }
@@ -574,7 +595,13 @@ function sttDelayNow(){                       // 直近の「話し終わり」�
   const d = (performance.now() - VAD.lastEnd)/1000;
   return d >= 0 && d < 20 ? d : null;
 }
-const STATS = {stt:[], tr:[]};
+const STATS = {first:[], stt:[], tr:[]};
+/* 話し始め → 最初の字幕が出るまで（リアルタイム方式のみ） */
+const FirstCap = {
+  val:null,
+  mark(){ if(this.val!=null || !VAD.lastStart) return; const d=(performance.now()-VAD.lastStart)/1000; this.val = d>=0 && d<15 ? d : null; },
+  take(){ const v=this.val; this.val=null; return v; }
+};
 const speedClass = v => v <= 1.5 ? 'fast' : v <= 3 ? 'mid' : 'slow';   // 緑 / 黄 / 赤
 function latHtml(v){ return `<span class="lat ${speedClass(v)}">${v.toFixed(1)}秒</span>`; }
 function gaugeHtml(v){ if(v==null) return '<span class="gauge"></span>—';
@@ -584,12 +611,13 @@ function pushStat(k, v){
   STATS[k].push(v); if(STATS[k].length > 5) STATS[k].shift();
   const avg = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
   const c = $('chipLat'); c.style.display='';
-  c.innerHTML = `平均 聞き取り${gaugeHtml(avg(STATS.stt))}　翻訳${gaugeHtml(avg(STATS.tr))}`;
+  c.innerHTML = (STATS.first.length ? `平均 字幕${gaugeHtml(avg(STATS.first))}　確定` : '平均 確定') + `${gaugeHtml(avg(STATS.stt))}　翻訳${gaugeHtml(avg(STATS.tr))}`;
 }
 function setLabel(e){
   const tEl = e.srcEl && e.srcEl.querySelector('.t'); if(!tEl) return;
   const parts = [esc(e.t)];
-  if(e.stt!=null) parts.push(`聞き取り ${latHtml(e.stt)}`);
+  if(e.first!=null) parts.push(`字幕 ${latHtml(e.first)}`);
+  if(e.stt!=null) parts.push(`確定 ${latHtml(e.stt)}`);
   if(e.lat!=null) parts.push(`翻訳 ${latHtml(e.lat + (e.wait||0))}` + (e.wait>0.3 ? `（うち待ち ${e.wait.toFixed(1)}秒）` : ''));
   tEl.innerHTML = parts.join(' · ');
 }
@@ -613,7 +641,8 @@ function addEntry(src, meta, draft, stt){
   e.srcEl = document.createElement('div'); e.srcEl.className='seg';
   e.srcEl.innerHTML = `<span class="t">${e.t}</span>${esc(brk(src))}`;
   if(stt === undefined) stt = (running && !/テキスト|途中/.test(meta||'')) ? sttDelayNow() : null;
-  e.stt = stt; setLabel(e); pushStat('stt', stt);
+  e.first = (running && LIVE_ENGINES.includes(S.sttEngine)) ? FirstCap.take() : null;
+  e.stt = stt; setLabel(e); pushStat('first', e.first); pushStat('stt', stt);
   e.trEl = document.createElement('div'); e.trEl.className='seg';
   e.srcEl.onclick = ()=>linkTo(e, 'tr'); e.trEl.onclick = ()=>linkTo(e, 'src');
   $('srcList').appendChild(e.srcEl); $('trList').appendChild(e.trEl);
@@ -947,7 +976,7 @@ async function startAudio(){
     $('level').firstElementChild.style.width = Math.min(100, rms*600)+'%';
     // 話し終わりの時刻を推定（聞き取りの遅延表示に使う）
     const nowT = performance.now();
-    if(rms > S.vadThresh){ VAD.lastVoice = nowT; VAD.speaking = true; }
+    if(rms > S.vadThresh){ if(!VAD.speaking) VAD.lastStart = nowT; VAD.lastVoice = nowT; VAD.speaking = true; }
     else if(VAD.speaking && nowT - VAD.lastVoice > 300){ VAD.speaking = false; VAD.lastEnd = VAD.lastVoice; }
     if(onPCM16k) onPCM16k(out, rms);
     ev.outputBuffer.getChannelData(0).fill(0);
@@ -1126,7 +1155,7 @@ const SarvamLive = {
   /* 英語訳モード：原文（アッサム語）用にもう1本 Sarvam をつなぐ */
   openAux(){
     const q = new URLSearchParams({language_code:'as-IN', model: this.v3Fallback ? 'saaras:v3-realtime' : S.sttModel,
-      stream_type:'balanced', sample_rate:'16000', encoding:'linear16'});
+      stream_type:S.sarvamSpeed||'balanced', sample_rate:'16000', encoding:'linear16'});
     const v = vocabList().slice(0,50).map(x=>x.slice(0,64));
     if(v.length && /v4/.test(S.sttModel) && !this.v3Fallback) q.set('keyterms', JSON.stringify(v));
     let ws;
@@ -1177,7 +1206,7 @@ const SarvamLive = {
   },
   target(){
     const q = new URLSearchParams({language_code: S.sttLang==='auto' ? 'auto' : 'as-IN', model:S.sttModel,
-      stream_type:'balanced', sample_rate:'16000', encoding:'linear16'});
+      stream_type:S.sarvamSpeed||'balanced', sample_rate:'16000', encoding:'linear16'});
     if(S.sttLang==='as+en+hi' && !this.noMode) q.set('mode','codemix');
     if(S.sttLang==='translate'){ q.set('mode','translate'); if(this.v3Fallback) q.set('model','saaras:v3-realtime'); }
     const v = vocabList().slice(0,50).map(x=>x.slice(0,64));
