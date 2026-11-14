@@ -172,7 +172,22 @@ textarea{min-height:64px}
 <div id="settings">
   <div id="sheet">
     <div class="row"><h2 style="flex:1">設定</h2><button class="btn" id="closeSettings">閉じる</button></div>
-    <div class="hint">APIキーはこのiPhoneのブラウザ内にだけ保存されます（外部サーバーには送りません。各AI会社のAPIへ直接送信）。</div>
+    <h3>接続方法</h3>
+    <select id="mode">
+      <option value="own">自分のAPIキーを使う</option>
+      <option value="team">チーム用サーバーを使う（合言葉だけで利用）</option>
+    </select>
+    <div id="teamBox">
+      <label>サーバーのURL</label>
+      <input id="serverUrl" autocomplete="off" autocapitalize="off" placeholder="https://assam-relay.xxxx.workers.dev">
+      <label>合言葉</label>
+      <input id="teamPass" type="password" autocomplete="off" autocapitalize="off">
+      <div class="grid2" style="margin-top:8px">
+        <button class="btn ghost" id="btnInvite">招待リンクをコピー</button>
+        <button class="btn ghost" id="btnTeamTest">接続テスト</button>
+      </div>
+      <div class="hint" id="teamOut">APIキーはサーバー側に保存されているので、このiPhoneにはキーが残りません。「招待リンク」を他の人に送ると、開くだけで同じ設定になります（リンクには合言葉が含まれます）。</div>
+    </div>
 
     <h3>① 文字起こし（音声 → アッサム語）</h3>
     <label>エンジン</label>
@@ -228,7 +243,9 @@ textarea{min-height:64px}
     <label>専門用語・固有名詞（改行区切り）</label>
     <textarea id="vocab" placeholder="例：&#10;স্তন কেন্সাৰ&#10;ASHA&#10;JICA&#10;mammography"></textarea>
 
+    <div id="ownBox">
     <h3>④ APIキー</h3>
+    <div class="hint">APIキーはこのiPhoneのブラウザ内にだけ保存され、各AI会社のAPIへ直接送られます。</div>
     <label>Google AI Studio（Gemini）</label>
     <input id="keyGemini" type="password" autocomplete="off" placeholder="AIza...">
     <label>OpenAI</label>
@@ -239,7 +256,8 @@ textarea{min-height:64px}
     <input id="keyGct" type="password" autocomplete="off" placeholder="AIza...">
     <div class="hint">使うエンジンのキーだけ入れればOKです。Gemini 1本で文字起こし＋翻訳の両方ができます。</div>
 
-    <h3>APIキーのバックアップ</h3>
+    </div>
+    <h3>APIキー・設定のバックアップ</h3>
     <div class="hint">キーが消えてしまった時のために、キーと設定をまとめた「復元コード」を作れます。コピーして安全な場所（パスワード管理アプリなど）に保存し、消えた時は下の欄に貼り付けて「復元」を押してください。コードにはAPIキーが含まれるので、他人には送らないでください。</div>
     <div class="grid2" style="margin-top:8px">
       <button class="btn ghost" id="btnBackup">復元コードをコピー</button>
@@ -293,7 +311,7 @@ const MODEL_LABELS = {
 const DEFAULTS = {
   sttEngine:'gemini-live', sttModel:'', sttLang:'as+en+hi', silenceSec:0.8, maxSec:12, vadThresh:0.012,
   trEngine:'gemini', trModel:'', target:'ja', draftOn:'on', draftSec:1.5, scrollSpeed:'normal', context:'', vocab:'',
-  keyGemini:'', keyOpenai:'', keyClaude:'', keyGct:'',
+  keyGemini:'', keyOpenai:'', keyClaude:'', keyGct:'', mode:'own', serverUrl:'', teamPass:'',
 };
 const LS = 'assamTranslator.v1';
 let S = loadSettings();
@@ -309,7 +327,7 @@ function loadSettings(){
 function saveSettings(){ try{ localStorage.setItem(LS, JSON.stringify(S)); }catch(e){} }
 
 const $ = id => document.getElementById(id);
-const FIELDS = ['sttEngine','sttModel','sttLang','trEngine','trModel','draftOn','draftSec','scrollSpeed','context','vocab','keyGemini','keyOpenai','keyClaude','keyGct'];
+const FIELDS = ['sttEngine','sttModel','sttLang','trEngine','trModel','draftOn','draftSec','scrollSpeed','context','vocab','keyGemini','keyOpenai','keyClaude','keyGct','mode','serverUrl','teamPass'];
 
 /* モデルのプルダウン（一覧から選択＋「その他（手入力）」） */
 function fillModelSelect(selId, inputId, list, cur){
@@ -337,6 +355,8 @@ function syncSettingsUI(){
   if(!S.trModel || !sameFamilyTr(S.trEngine, S.trModel)) { S.trModel = tm.def; $('trModel').value = tm.def; }
   fillModelSelect('trModelSel','trModel', tm.list, S.trModel);
   $('trHint').textContent = tm.hint;
+  $('teamBox').style.display = TEAM() ? '' : 'none';
+  $('ownBox').style.display  = TEAM() ? 'none' : '';
   updateChips();
 }
 bindModelSelect('sttModelSel','sttModel','sttModel');
@@ -651,15 +671,35 @@ async function streamSSE(url, opt, onData, extSignal, timeoutMs=45000){
     throw e;
   }finally{ clearTimeout(to); if(extSignal) extSignal.removeEventListener('abort', onExt); }
 }
-function needKey(k, name){ if(!S[k]) throw new Error(`${name} のAPIキーが未設定です（⚙︎設定）`); return S[k]; }
+const TEAM = ()=> S.mode==='team';
+function teamBase(){ return String(S.serverUrl||'').trim().replace(/\/+$/,''); }
+function needTeam(){ if(!teamBase() || !S.teamPass) throw new Error('チーム用サーバーのURLと合言葉が未設定です（⚙︎設定）'); }
+function needKey(k, name){
+  if(TEAM()){ needTeam(); return 'team'; }
+  if(!S[k]) throw new Error(`${name} のAPIキーが未設定です（⚙︎設定）`); return S[k];
+}
+/* API の送り先を一か所で決める（自分のキー → 各社へ直接 / チーム → 中継サーバー経由） */
+function EP(svc, path, headers={}){
+  const h = Object.assign({}, headers);
+  if(TEAM()){
+    needTeam(); h['X-App-Password'] = S.teamPass;
+    const b = teamBase();
+    return {url: svc==='translate' ? b+'/translate' : `${b}/${svc}/${path}`, headers:h};
+  }
+  if(svc==='gemini'){ const k=needKey('keyGemini','Gemini'); return {url:`https://generativelanguage.googleapis.com/${path}${path.includes('?')?'&':'?'}key=${encodeURIComponent(k)}`, headers:h}; }
+  if(svc==='openai'){ h['Authorization']='Bearer '+needKey('keyOpenai','OpenAI'); return {url:'https://api.openai.com/'+path, headers:h}; }
+  if(svc==='anthropic'){ h['x-api-key']=needKey('keyClaude','Anthropic'); h['anthropic-dangerous-direct-browser-access']='true'; return {url:'https://api.anthropic.com/'+path, headers:h}; }
+  if(svc==='translate'){ const k=needKey('keyGct','Google Cloud Translation'); return {url:'https://translation.googleapis.com/language/translate/v2?key='+encodeURIComponent(k), headers:h}; }
+  throw new Error('unknown service');
+}
 
 async function translateStream(text, prev, onPartial, signal, partial){
   const eng = S.trEngine, model = S.trModel;
   if(eng==='google'){
-    const key = needKey('keyGct','Google Cloud Translation');
     const one = async tgt => {
-      const j = await fetchJSON('https://translation.googleapis.com/language/translate/v2?key='+encodeURIComponent(key),
-        {method:'POST', headers:{'Content-Type':'application/json'}, signal, body:JSON.stringify({q:text, source:'as', target:tgt, format:'text', model:'nmt'})});
+      const ep = EP('translate', '', {'Content-Type':'application/json'});
+      const j = await fetchJSON(ep.url,
+        {method:'POST', headers:ep.headers, signal, body:JSON.stringify({q:text, source:'as', target:tgt, format:'text', model:'nmt'})});
       return decodeHTML(j.data.translations[0].translatedText);
     };
     const r = {};
@@ -671,22 +711,21 @@ async function translateStream(text, prev, onPartial, signal, partial){
   let acc = '', streamErr = null;
   const push = t=>{ if(!t) return; acc += t; onPartial && onPartial(parseTrOut(acc)); };
   if(eng==='gemini'){
-    const key = needKey('keyGemini','Gemini');
-    await streamSSE(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`,
-      {method:'POST', headers:{'Content-Type':'application/json'},
+    const ep = EP('gemini', `v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`, {'Content-Type':'application/json'});
+    await streamSSE(ep.url,
+      {method:'POST', headers:ep.headers,
        body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}], generationConfig:{temperature:0.2}})},
       j=>{ if(j.error) streamErr=j.error.message; push(geminiText(j)); }, signal);
   } else if(eng==='openai'){
-    const key = needKey('keyOpenai','OpenAI');
-    await streamSSE('https://api.openai.com/v1/chat/completions',
-      {method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+    const ep = EP('openai', 'v1/chat/completions', {'Content-Type':'application/json'});
+    await streamSSE(ep.url,
+      {method:'POST', headers:ep.headers,
        body:JSON.stringify({model, stream:true, messages:[{role:'user',content:prompt}]})},
       j=>{ if(j.error) streamErr=j.error.message; push(j.choices?.[0]?.delta?.content); }, signal);
   } else if(eng==='claude'){
-    const key = needKey('keyClaude','Anthropic');
-    await streamSSE('https://api.anthropic.com/v1/messages',
-      {method:'POST', headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01',
-        'anthropic-dangerous-direct-browser-access':'true'},
+    const ep = EP('anthropic', 'v1/messages', {'Content-Type':'application/json','anthropic-version':'2023-06-01'});
+    await streamSSE(ep.url,
+      {method:'POST', headers:ep.headers,
        body:JSON.stringify({model, max_tokens:1024, stream:true, messages:[{role:'user',content:prompt}]})},
       j=>{ if(j.type==='error') streamErr=j.error?.message||'stream error';
            if(j.type==='content_block_delta' && j.delta?.type==='text_delta') push(j.delta.text); }, signal);
@@ -810,7 +849,7 @@ const LiveEngine = {
   ws:null, sendBuf:[], sendLen:0, timer:null, sessionStart:0, reconnectTimer:null, closing:false, interimText:'',
   async start(){
     needKey('keyGemini','Gemini');
-    this.closing=false; await this.connect();
+    this.closing=false; this.via=null; await this.connect();
     Draft.start();
     onPCM16k = (pcm)=>{
       this.sendBuf.push(pcm); this.sendLen += pcm.length;
@@ -829,10 +868,24 @@ const LiveEngine = {
     $('chipTimer').textContent = 'セッション ' + Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
     if(s >= 570 && !this.rotating) this.rotate(); // 9分30秒で張り替え
   },
-  connect(){
+  async connect(){
+    if(!TEAM()) return this.open('wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=' + encodeURIComponent(S.keyGemini));
+    // チーム：①使い捨てトークンで Google に直接接続 → だめなら ②中継サーバー経由
+    const proxyUrl = teamBase().replace(/^http/,'ws') + '/gemini-live?pw=' + encodeURIComponent(S.teamPass);
+    if(this.via !== 'proxy'){
+      try{
+        setState('接続中…','busy');
+        const ep = EP('live-token','', {'Content-Type':'application/json'});
+        const j = await fetchJSON(teamBase()+'/live-token', {method:'POST', headers:ep.headers, body:'{}'}, 15000);
+        await this.open('wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token=' + encodeURIComponent(j.token));
+        this.via = 'token'; return;
+      }catch(e){ if(/合言葉|401/.test(e.message)) throw e; this.via = 'proxy'; }
+    }
+    return this.open(proxyUrl);
+  },
+  open(url){
     return new Promise((resolve, reject)=>{
       this.ready=false;
-      const url = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=' + encodeURIComponent(S.keyGemini);
       const ws = new WebSocket(url); this.ws = ws;
       setState('接続中…','busy');
       let settled=false;
@@ -956,8 +1009,9 @@ const ChunkEngine = {
     if(S.sttEngine==='gemini-chunk'){
       const langs = S.sttLang==='auto' ? 'the spoken language(s)' : S.sttLang==='as' ? 'Assamese' : 'Assamese (with possible English/Hindi code-mixing)';
       const prompt = `Transcribe this audio verbatim in ${langs}. Write Assamese in Assamese (Bengali-Assamese) script; keep English words in Latin script. Output ONLY the transcript. If there is no speech, output an empty string.` + (vocabList().length? '\nKey terms that may appear: '+vocabList().join(', ') : '');
-      const j = await fetchJSON(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(S.sttModel)}:generateContent?key=${encodeURIComponent(S.keyGemini)}`,
-        {method:'POST', headers:{'Content-Type':'application/json'},
+      const ep = EP('gemini', `v1beta/models/${encodeURIComponent(S.sttModel)}:generateContent`, {'Content-Type':'application/json'});
+      const j = await fetchJSON(ep.url,
+        {method:'POST', headers:ep.headers,
          body:JSON.stringify({contents:[{role:'user',parts:[{inline_data:{mime_type:'audio/wav', data:b64FromBytes(wav)}},{text:prompt}]}], generationConfig:{temperature:0}})}, 45000);
       return geminiText(j);
     } else {
@@ -967,8 +1021,8 @@ const ChunkEngine = {
       const codes = sttLangCodes(false);
       if(/^gpt-transcribe/.test(S.sttModel)){ codes.forEach(c=>fd.append('languages[]', c)); vocabList().forEach(k=>fd.append('keywords[]', k.replace(/[<>\r\n]/g,''))); }
       else if(codes.length===1) fd.append('language', codes[0]);
-      const j = await fetchJSON('https://api.openai.com/v1/audio/transcriptions',
-        {method:'POST', headers:{'Authorization':'Bearer '+S.keyOpenai}, body:fd}, 45000);
+      const ep = EP('openai', 'v1/audio/transcriptions');
+      const j = await fetchJSON(ep.url, {method:'POST', headers:ep.headers, body:fd}, 45000);
       return j.text;
     }
   },
@@ -1005,6 +1059,7 @@ $('btnKeyCheck').onclick = async ()=>{
   const out=$('keyCheckOut'); out.textContent='テスト中…';
   const res=[];
   const test = async (name, fn)=>{ try{ await fn(); res.push('✅ '+name); }catch(e){ res.push('❌ '+name+': '+e.message); } out.innerHTML = res.map(esc).join('<br>'); };
+  if(TEAM()){ await teamTest(out); return; }
   if(S.keyGemini) await test('Gemini', ()=>fetchJSON('https://generativelanguage.googleapis.com/v1beta/models?key='+encodeURIComponent(S.keyGemini),{},15000));
   if(S.keyOpenai) await test('OpenAI', ()=>fetchJSON('https://api.openai.com/v1/models',{headers:{'Authorization':'Bearer '+S.keyOpenai}},15000));
   if(S.keyClaude) await test('Claude', ()=>fetchJSON('https://api.anthropic.com/v1/models',{headers:{'x-api-key':S.keyClaude,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'}},15000));
@@ -1031,6 +1086,36 @@ $('btnRestore').onclick = ()=>{
   }catch(e){ $('backupOut').textContent='❌ 復元コードが正しくありません。'; }
 };
 
+/* ============ チーム用サーバー ============ */
+async function teamTest(out){
+  out = out || $('teamOut');
+  try{
+    needTeam(); out.textContent='テスト中…';
+    const j = await fetchJSON(teamBase()+'/health', {headers:{'X-App-Password':S.teamPass}}, 15000);
+    const mark = b=>b?'✅':'—';
+    out.innerHTML = `✅ サーバーに接続できました<br>Gemini ${mark(j.gemini)}　OpenAI ${mark(j.openai)}　Claude ${mark(j.anthropic)}　Google翻訳 ${mark(j.translate)}<br><span style="opacity:.7">— は、サーバーにそのキーが入っていないエンジン（使えません）</span>`;
+  }catch(e){ out.textContent = '❌ ' + e.message; }
+}
+$('btnTeamTest').onclick = ()=>{ readAllFields(); teamTest(); };
+$('btnInvite').onclick = async ()=>{
+  readAllFields();
+  try{ needTeam(); }catch(e){ $('teamOut').textContent='❌ '+e.message; return; }
+  const code = btoa(unescape(encodeURIComponent(JSON.stringify({u:teamBase(), p:S.teamPass}))));
+  const link = location.origin + location.pathname + '#join=' + code;
+  try{ await navigator.clipboard.writeText(link); $('teamOut').textContent='✅ 招待リンクをコピーしました。LINEなどで送ってください（合言葉が含まれます）。'; }
+  catch(e){ $('teamOut').textContent = link; }
+};
+// 招待リンクで開かれた場合：チーム設定を取り込み、URLから消す
+(function(){
+  const m = location.hash.match(/#join=([^&]+)/);
+  if(!m) return;
+  try{
+    const j = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1])))));
+    if(j.u && j.p){ S.mode='team'; S.serverUrl=j.u; S.teamPass=j.p; saveSettings(); window._joined = true; }
+  }catch(e){}
+  history.replaceState(null, '', location.pathname + location.search);
+})();
+
 /* ============ 保存できるかの確認 ============ */
 function storageWorks(){
   try{ const k='assamTranslator.test'; localStorage.setItem(k,'1'); const ok=localStorage.getItem(k)==='1'; localStorage.removeItem(k); return ok; }
@@ -1044,7 +1129,8 @@ syncSettingsUI();
 if(location.protocol!=='file:' && !storageWorks())
   showWarn('⚠️ このブラウザでは設定・APIキーを保存できません。プライベートモードをやめるか、iPhoneの「設定 → アプリ → Safari →『すべてのCookieをブロック』」をオフにしてください。');
 if(location.protocol==='file:') showWarn('ファイルを直接開いています。iPhoneでマイクを使うには https のURLで開いてください。');
-if(!S.keyGemini && !S.keyOpenai) setTimeout(()=>$('settings').classList.add('open'), 300);
+if(window._joined){ showWarn('✅ チーム用の設定を読み込みました。「● 開始」で使えます。'); setTimeout(()=>showWarn(''), 6000); }
+else if(TEAM() ? !(S.serverUrl && S.teamPass) : !(S.keyGemini || S.keyOpenai)) setTimeout(()=>$('settings').classList.add('open'), 300);
 </script>
 </body>
 </html>
