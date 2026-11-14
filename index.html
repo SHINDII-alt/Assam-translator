@@ -192,7 +192,9 @@ textarea{min-height:64px}
     <h3>① 文字起こし（音声 → アッサム語）</h3>
     <label>エンジン</label>
     <select id="sttEngine">
-      <option value="gemini-live">Gemini リアルタイム（おすすめ）</option>
+      <option value="gemini-live">Gemini リアルタイム</option>
+      <option value="sarvam-live">Sarvam AI リアルタイム（インド言語特化）</option>
+      <option value="sarvam-chunk">Sarvam AI 回線が弱い時用（ひと言ごとに送信）</option>
       <option value="gemini-chunk">Gemini 回線が弱い時用（ひと言ごとに送信）</option>
       <option value="openai-chunk">OpenAI（比較用・ひと言ごとに送信）</option>
     </select>
@@ -254,6 +256,8 @@ textarea{min-height:64px}
     <input id="keyClaude" type="password" autocomplete="off" placeholder="sk-ant-...">
     <label>Google Cloud Translation</label>
     <input id="keyGct" type="password" autocomplete="off" placeholder="AIza...">
+    <label>Sarvam AI（インド言語の音声認識）</label>
+    <input id="keySarvam" type="password" autocomplete="off" placeholder="sk_...">
     <div class="hint">使うエンジンのキーだけ入れればOKです。Gemini 1本で文字起こし＋翻訳の両方ができます。</div>
 
     </div>
@@ -272,7 +276,7 @@ textarea{min-height:64px}
       <button class="btn ghost" id="btnKeyCheck">キー接続テスト</button>
     </div>
     <div class="hint" id="keyCheckOut"></div>
-    <div class="hint" style="margin-top:14px;opacity:.7">版：2026-11-14 チーム対応</div>
+    <div class="hint" style="margin-top:14px;opacity:.7">版：2026-11-15 Sarvam対応</div>
     <div class="hint" style="margin-top:14px">医療面談で使う場合は、相手の同意を得て、重要な判断に関わる内容は必ず人（通訳者）が確認してください。AIの翻訳は誤る可能性があります。</div>
   </div>
 </div>
@@ -285,6 +289,10 @@ const STT_MODELS = {
     hint:'話している途中から字幕が出ます。1セッション10分上限のため、9分半で自動的につなぎ直します。'},
   'gemini-chunk': {list:['gemini-3.5-flash-lite','gemini-3.8-flash','gemini-4-hydrogen'], def:'gemini-3.5-flash-lite',
     hint:'話し終わって少し間が空くごとに、まとめて送ります。字幕は数秒遅れますが、回線が不安定でも途切れにくい方式です。'},
+  'sarvam-live':  {list:['saaras:v4','saaras:v3-realtime'], def:'saaras:v4',
+    hint:'インドのSarvam AI。アッサム語を含むインド言語に特化した音声認識です。話している途中から字幕が出ます。'},
+  'sarvam-chunk': {list:['saaras:v4','saaras:v3'], def:'saaras:v4',
+    hint:'Sarvam AI に、ひと言ごと（最大30秒）にまとめて送ります。回線が不安定な時向けです。'},
   'openai-chunk': {list:['gpt-transcribe'], def:'gpt-transcribe',
     hint:'OpenAIのアッサム語対応は公式に明記されていません。比較用として使ってください。'},
 };
@@ -296,6 +304,9 @@ const TR_MODELS = {
   claude: {list:['claude-haiku-5-5','claude-sonnet-5-5','claude-opus-5-5'], def:'claude-haiku-5-5', hint:'Haiku が高速、Sonnet が高精度。'},
 };
 const MODEL_LABELS = {
+  'saaras:v4':'Saaras v4（最新・おすすめ）',
+  'saaras:v3-realtime':'Saaras v3 Realtime（低遅延）',
+  'saaras:v3':'Saaras v3（旧モデル）',
   'gemini-3.5-transcribe-live':'Gemini 3.5 Transcribe Live（標準）',
   'gemini-3.5-flash-lite':'Gemini 3.5 Flash-Lite（速い・安い）',
   'gemini-3.8-flash':'Gemini 3.8 Flash（バランス）',
@@ -312,7 +323,7 @@ const MODEL_LABELS = {
 const DEFAULTS = {
   sttEngine:'gemini-live', sttModel:'', sttLang:'as+en+hi', silenceSec:0.8, maxSec:12, vadThresh:0.012,
   trEngine:'gemini', trModel:'', target:'ja', draftOn:'on', draftSec:1.5, scrollSpeed:'normal', context:'', vocab:'',
-  keyGemini:'', keyOpenai:'', keyClaude:'', keyGct:'', mode:'own', serverUrl:'', teamPass:'',
+  keyGemini:'', keyOpenai:'', keyClaude:'', keyGct:'', keySarvam:'', mode:'own', serverUrl:'', teamPass:'',
 };
 const LS = 'assamTranslator.v1';
 let S = loadSettings();
@@ -328,7 +339,7 @@ function loadSettings(){
 function saveSettings(){ try{ localStorage.setItem(LS, JSON.stringify(S)); }catch(e){} }
 
 const $ = id => document.getElementById(id);
-const FIELDS = ['sttEngine','sttModel','sttLang','trEngine','trModel','draftOn','draftSec','scrollSpeed','context','vocab','keyGemini','keyOpenai','keyClaude','keyGct','mode','serverUrl','teamPass'];
+const FIELDS = ['sttEngine','sttModel','sttLang','trEngine','trModel','draftOn','draftSec','scrollSpeed','context','vocab','keyGemini','keyOpenai','keyClaude','keyGct','keySarvam','mode','serverUrl','teamPass'];
 
 /* モデルのプルダウン（一覧から選択＋「その他（手入力）」） */
 function fillModelSelect(selId, inputId, list, cur){
@@ -366,6 +377,7 @@ function sameFamily(eng, m){
   if(eng==='gemini-live') return /live/.test(m);
   if(eng==='gemini-chunk') return /^gemini/.test(m) && !/live/.test(m);
   if(eng==='openai-chunk') return /^(gpt|whisper)/.test(m);
+  if(/^sarvam/.test(eng)) return /^saaras/.test(m) && (eng==='sarvam-live' ? m!=='saaras:v3' : m!=='saaras:v3-realtime');
   return true;
 }
 function sameFamilyTr(eng, m){
@@ -408,6 +420,30 @@ function sttLangCodes(bcp){ // bcp=true → as-IN style
   if(S.sttLang==='auto') return [];
   const m = bcp ? {as:'as-IN',en:'en-IN',hi:'hi-IN'} : {as:'as',en:'en',hi:'hi'};
   return S.sttLang.split('+').map(x=>m[x]);
+}
+/* 書き起こしの言語フィルター
+   ・日本語（通訳の声など）は常に除外
+   ・「アッサム語のみ」では英語・ヒンディー語も除外（アッサム文字の部分だけ残す） */
+const RE_JA   = /[\u3040-\u30ff\u31f0-\u31ff\u3400-\u4dbf\u4e00-\u9fff\uff66-\uff9f\u3000-\u303f]+/g;
+const RE_DEVA = /[\u0900-\u0963\u0966-\u097F]+/g; // ।॥ はアッサム語でも使うので残す
+function cleanTranscript(text, lang){
+  let t = String(text||'');
+  lang = String(lang||'').toLowerCase();
+  if(/^ja/.test(lang)) return '';
+  t = t.replace(RE_JA, ' ');
+  if(S.sttLang==='as'){
+    if(lang && !/^(as|bn)/.test(lang)) return '';           // 英語・ヒンディー語と判定されたもの
+    t = t.replace(RE_DEVA, ' ');                               // ヒンディー語の文字
+    // 文ごとに見て、アッサム文字が少ない文（英語の文）は捨てる
+    t = t.split(/(?<=[।॥?!.])\s+/).filter(seg=>{
+      const bn = (seg.match(/[\u0980-\u09FF]/g)||[]).length;
+      const la = (seg.match(/[A-Za-z]/g)||[]).length;
+      return bn > 0 && bn >= la;
+    }).join(' ');
+  }
+  t = t.replace(/\s{2,}/g,' ').trim();
+  if(!/[\p{L}]/u.test(t)) return '';
+  return t;
 }
 function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function now(){ return new Date().toTimeString().slice(0,8); }
@@ -690,6 +726,7 @@ function EP(svc, path, headers={}){
   if(svc==='gemini'){ const k=needKey('keyGemini','Gemini'); return {url:`https://generativelanguage.googleapis.com/${path}${path.includes('?')?'&':'?'}key=${encodeURIComponent(k)}`, headers:h}; }
   if(svc==='openai'){ h['Authorization']='Bearer '+needKey('keyOpenai','OpenAI'); return {url:'https://api.openai.com/'+path, headers:h}; }
   if(svc==='anthropic'){ h['x-api-key']=needKey('keyClaude','Anthropic'); h['anthropic-dangerous-direct-browser-access']='true'; return {url:'https://api.anthropic.com/'+path, headers:h}; }
+  if(svc==='sarvam'){ h['api-subscription-key']=needKey('keySarvam','Sarvam AI'); return {url:'https://api.sarvam.ai/'+path, headers:h}; }
   if(svc==='translate'){ const k=needKey('keyGct','Google Cloud Translation'); return {url:'https://translation.googleapis.com/language/translate/v2?key='+encodeURIComponent(k), headers:h}; }
   throw new Error('unknown service');
 }
@@ -891,7 +928,8 @@ const LiveEngine = {
       setState('接続中…','busy');
       let settled=false;
       ws.onopen = ()=>{
-        const iat = {languageCodes: sttLangCodes(true)};
+        // 日本語・英語・ヒンディー語も「その言語として」認識させ、後で除外する
+        const iat = {languageCodes: S.sttLang==='auto' ? [] : ['as-IN','en-IN','hi-IN','ja-JP']};
         const voc = vocabList(); if(voc.length) iat.customVocabulary = voc;
         ws.send(JSON.stringify({setup:{
           model: 'models/' + S.sttModel,
@@ -909,11 +947,11 @@ const LiveEngine = {
         }
         const sc = m.serverContent;
         if(sc?.interimInputTranscription){
-          this.interimText = sc.interimInputTranscription.text || '';
+          this.interimText = cleanTranscript(sc.interimInputTranscription.text, sc.interimInputTranscription.languageCode);
           setSrcTail(this.interimText); Draft.update(this.interimText);
         }
         if(sc?.inputTranscription){
-          const t = (sc.inputTranscription.text||'').trim();
+          const t = cleanTranscript(sc.inputTranscription.text, sc.inputTranscription.languageCode);
           this.interimText=''; setSrcTail('');
           const carry = Draft.take();
           if(t){ const e = addEntry(t, sc.inputTranscription.languageCode||'', carry); requestTranslation(e); }
@@ -956,11 +994,94 @@ const LiveEngine = {
   }
 };
 
+/* ============ エンジン: Sarvam AI リアルタイム（WebSocket） ============ */
+const SarvamLive = {
+  ws:null, ready:false, closing:false, interimText:'', sendBuf:[], sendLen:0, pingTimer:null, noMode:false, reconnectTimer:null,
+  async start(){
+    needKey('keySarvam','Sarvam AI');
+    this.closing=false; this.noMode=false;
+    await this.connect();
+    Draft.start();
+    onPCM16k = pcm=>{
+      this.sendBuf.push(pcm); this.sendLen += pcm.length;
+      if(this.sendLen >= 1600){ // 約100ms
+        const chunk = concatI16(this.sendBuf); this.sendBuf=[]; this.sendLen=0;
+        if(this.ws && this.ws.readyState===1 && this.ready)
+          this.ws.send(JSON.stringify({event:'audio_input', audio:int16ToB64(chunk)}));
+      }
+    };
+    this.pingTimer = setInterval(()=>{ try{ if(this.ws && this.ws.readyState===1) this.ws.send(JSON.stringify({event:'ping'})); }catch(e){} }, 15000);
+  },
+  target(){
+    const q = new URLSearchParams({language_code: S.sttLang==='auto' ? 'auto' : 'as-IN', model:S.sttModel,
+      stream_type:'balanced', sample_rate:'16000', encoding:'linear16'});
+    if(S.sttLang==='as+en+hi' && !this.noMode) q.set('mode','codemix');
+    const v = vocabList().slice(0,50).map(x=>x.slice(0,64));
+    if(v.length && /v4/.test(S.sttModel)) q.set('keyterms', JSON.stringify(v));
+    if(TEAM()){ q.set('pw', S.teamPass); return {url: teamBase().replace(/^http/,'ws') + '/sarvam-live?' + q}; }
+    return {url:'wss://api.sarvam.ai/speech-to-text-realtime/ws?' + q, proto:['api-subscription-key.' + S.keySarvam]};
+  },
+  connect(){
+    return new Promise((resolve, reject)=>{
+      this.ready=false;
+      const t = this.target();
+      let ws; try{ ws = t.proto ? new WebSocket(t.url, t.proto) : new WebSocket(t.url); }catch(e){ reject(e); return; }
+      this.ws = ws; setState('接続中…','busy');
+      let settled=false;
+      const ok = ()=>{ if(settled) return; settled=true; this.ready=true; setState('聞き取り中（Sarvam）','on'); resolve(); };
+      ws.onopen = ()=> setTimeout(ok, 1500);          // session.begin が来なくても開始
+      ws.onmessage = ev=>{
+        let m; try{ m = JSON.parse(ev.data); }catch(e){ return; }
+        const type = m.event || m.type;
+        if(type==='session.begin'){ ok(); return; }
+        if(type==='transcript.partial'){
+          this.interimText = cleanTranscript(m.text, m.language);
+          setSrcTail(this.interimText); Draft.update(this.interimText);
+        }
+        if(type==='transcript.final'){
+          const tx = cleanTranscript(m.text, m.language);
+          this.interimText=''; setSrcTail('');
+          const carry = Draft.take();
+          if(tx){ const e = addEntry(tx, 'Sarvam', carry); requestTranslation(e); }
+        }
+        if(type==='error'){ showWarn('Sarvam: ' + (m.message || m.code || 'エラー')); }
+      };
+      ws.onerror = ()=>{};
+      ws.onclose = ev=>{
+        if(this.ws!==ws) return;
+        this.ready=false;
+        if(!settled){
+          settled=true;
+          // mode=codemix が使えないモデルの場合は mode なしで再接続
+          if(ev.code===4000 && !this.noMode && S.sttLang==='as+en+hi'){ this.noMode=true; this.connect().then(resolve, reject); return; }
+          const why = ev.code===1003 ? '（APIキー・残高・回数制限）' : ev.code===4000 ? '（設定値かアカウントの権限）' : '';
+          reject(new Error(`Sarvamに接続できません: ${ev.code} ${ev.reason||''}${why}`)); return;
+        }
+        if(!this.closing && running){
+          setState('再接続中…','busy');
+          clearTimeout(this.reconnectTimer);
+          this.reconnectTimer = setTimeout(()=>this.connect().catch(e=>showWarn(e.message)), 800);
+        }
+      };
+    });
+  },
+  stop(){
+    this.closing=true; clearInterval(this.pingTimer); clearTimeout(this.reconnectTimer);
+    const ws=this.ws; this.ws=null;
+    try{ if(ws && ws.readyState===1){ ws.send(JSON.stringify({event:'end'})); setTimeout(()=>ws.close(),1500); } else ws && ws.close(); }catch(e){}
+    const carry = Draft.lastResult; Draft.stop();
+    if(this.interimText){ const e=addEntry(this.interimText,'途中', carry); requestTranslation(e); }
+    this.interimText=''; setSrcTail('');
+  }
+};
+
 /* ============ エンジン2/3: 区切り送信（VAD） ============ */
 const ChunkEngine = {
   buf:[], len:0, silentMs:0, voicedMs:0, pre:[], inflight:0,
   async start(){
-    if(S.sttEngine==='gemini-chunk') needKey('keyGemini','Gemini'); else needKey('keyOpenai','OpenAI');
+    if(S.sttEngine==='gemini-chunk') needKey('keyGemini','Gemini');
+    else if(S.sttEngine==='sarvam-chunk') needKey('keySarvam','Sarvam AI');
+    else needKey('keyOpenai','OpenAI');
     this.buf=[]; this.len=0; this.silentMs=0; this.voicedMs=0; this.pre=[];
     setState('聞き取り中（区切り）','on');
     onPCM16k = (pcm, rms)=>{
@@ -990,7 +1111,8 @@ const ChunkEngine = {
     this.inflight++; this.status();
     const order = (this.seq = (this.seq||0)+1);
     this.pending = this.pending || new Map();
-    const p = this.transcribe(pcm).then(t=>({t:(t||'').trim(), dur:(pcm.length/16000).toFixed(1)}))
+    const p = this.transcribe(pcm).then(r=>{ const o = (r && typeof r==='object') ? r : {text:r};
+        return {t: cleanTranscript(o.text, o.lang), dur:(pcm.length/16000).toFixed(1)}; })
       .catch(err=>{ showWarn('文字起こしエラー: '+err.message); setTimeout(()=>showWarn(''),6000); return {t:''}; });
     this.pending.set(order, p);
     this.drain();
@@ -1009,12 +1131,31 @@ const ChunkEngine = {
     const wav = wavFromI16(pcm);
     if(S.sttEngine==='gemini-chunk'){
       const langs = S.sttLang==='auto' ? 'the spoken language(s)' : S.sttLang==='as' ? 'Assamese' : 'Assamese (with possible English/Hindi code-mixing)';
-      const prompt = `Transcribe this audio verbatim in ${langs}. Write Assamese in Assamese (Bengali-Assamese) script; keep English words in Latin script. Output ONLY the transcript. If there is no speech, output an empty string.` + (vocabList().length? '\nKey terms that may appear: '+vocabList().join(', ') : '');
+      const only = S.sttLang==='as'
+        ? '\nTranscribe ONLY the Assamese speech. Completely omit any parts spoken in English, Hindi or Japanese.'
+        : '\nCompletely omit any parts spoken in Japanese (an interpreter may be speaking Japanese).';
+      const prompt = `Transcribe this audio verbatim in ${langs}. Write Assamese in Assamese (Bengali-Assamese) script; keep English words in Latin script. Output ONLY the transcript. If there is no speech, output an empty string.` + only + (vocabList().length? '\nKey terms that may appear: '+vocabList().join(', ') : '');
       const ep = EP('gemini', `v1beta/models/${encodeURIComponent(S.sttModel)}:generateContent`, {'Content-Type':'application/json'});
       const j = await fetchJSON(ep.url,
         {method:'POST', headers:ep.headers,
          body:JSON.stringify({contents:[{role:'user',parts:[{inline_data:{mime_type:'audio/wav', data:b64FromBytes(wav)}},{text:prompt}]}], generationConfig:{temperature:0}})}, 45000);
       return geminiText(j);
+    } else if(S.sttEngine==='sarvam-chunk'){
+      const send = async withMode => {
+        const fd = new FormData();
+        fd.append('file', new Blob([wav],{type:'audio/wav'}), 'speech.wav');
+        fd.append('model', S.sttModel);
+        fd.append('language_code', S.sttLang==='auto' ? 'unknown' : 'as-IN');
+        if(withMode && S.sttLang==='as+en+hi') fd.append('mode','codemix');
+        const v = vocabList().slice(0,50).map(x=>x.slice(0,64));
+        if(v.length && /v4/.test(S.sttModel)) fd.append('keyterms', JSON.stringify(v));
+        const ep = EP('sarvam', 'speech-to-text');
+        return fetchJSON(ep.url, {method:'POST', headers:ep.headers, body:fd}, 45000);
+      };
+      let j;
+      try{ j = await send(true); }
+      catch(e){ if(/^(400|422)/.test(e.message) && S.sttLang==='as+en+hi') j = await send(false); else throw e; }
+      return {text:j.transcript, lang:j.language_code};
     } else {
       const fd = new FormData();
       fd.append('file', new Blob([wav],{type:'audio/wav'}), 'speech.wav');
@@ -1040,7 +1181,7 @@ $('mic').onclick = async ()=>{
   try{
     running = true; $('mic').classList.add('rec'); $('mic').textContent='■ 停止';
     await startAudio();
-    engine = S.sttEngine==='gemini-live' ? LiveEngine : ChunkEngine;
+    engine = S.sttEngine==='gemini-live' ? LiveEngine : S.sttEngine==='sarvam-live' ? SarvamLive : ChunkEngine;
     await engine.start();
   }catch(e){
     showWarn(e.message || String(e)); setState('エラー','err'); stop(true);
@@ -1064,6 +1205,10 @@ $('btnKeyCheck').onclick = async ()=>{
   if(S.keyGemini) await test('Gemini', ()=>fetchJSON('https://generativelanguage.googleapis.com/v1beta/models?key='+encodeURIComponent(S.keyGemini),{},15000));
   if(S.keyOpenai) await test('OpenAI', ()=>fetchJSON('https://api.openai.com/v1/models',{headers:{'Authorization':'Bearer '+S.keyOpenai}},15000));
   if(S.keyClaude) await test('Claude', ()=>fetchJSON('https://api.anthropic.com/v1/models',{headers:{'x-api-key':S.keyClaude,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'}},15000));
+  if(S.keySarvam) await test('Sarvam AI', async ()=>{
+    const fd=new FormData(); fd.append('file', new Blob([wavFromI16(new Int16Array(8000))],{type:'audio/wav'}), 't.wav');
+    fd.append('model','saaras:v4'); fd.append('language_code','as-IN');
+    const ep=EP('sarvam','speech-to-text'); await fetchJSON(ep.url,{method:'POST',headers:ep.headers,body:fd},20000); });
   if(S.keyGct) await test('Google翻訳', ()=>fetchJSON('https://translation.googleapis.com/language/translate/v2?key='+encodeURIComponent(S.keyGct),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:'নমস্কাৰ',source:'as',target:'ja',format:'text'})},15000));
   if(!res.length) out.textContent='APIキーが入力されていません';
 };
@@ -1094,7 +1239,7 @@ async function teamTest(out){
     needTeam(); out.textContent='テスト中…';
     const j = await fetchJSON(teamBase()+'/health', {headers:{'X-App-Password':S.teamPass}}, 15000);
     const mark = b=>b?'✅':'—';
-    out.innerHTML = `✅ サーバーに接続できました<br>Gemini ${mark(j.gemini)}　OpenAI ${mark(j.openai)}　Claude ${mark(j.anthropic)}　Google翻訳 ${mark(j.translate)}<br><span style="opacity:.7">— は、サーバーにそのキーが入っていないエンジン（使えません）</span>`;
+    out.innerHTML = `✅ サーバーに接続できました<br>Gemini ${mark(j.gemini)}　OpenAI ${mark(j.openai)}　Claude ${mark(j.anthropic)}　Google翻訳 ${mark(j.translate)}　Sarvam ${mark(j.sarvam)}<br><span style="opacity:.7">— は、サーバーにそのキーが入っていないエンジン（使えません）</span>`;
   }catch(e){ out.textContent = '❌ ' + e.message; }
 }
 $('btnTeamTest').onclick = ()=>{ readAllFields(); teamTest(); };
