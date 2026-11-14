@@ -9,53 +9,75 @@
 <title>Assam Live Translator</title>
 <style>
 :root{
-  --bg:#101418; --panel:#1a2027; --panel2:#222a33; --line:#2e3742;
+  --bg:#101418; --panel:#161c22; --panel2:#222a33; --line:#2e3742;
   --text:#eef2f5; --sub:#9aa7b4; --accent:#3fb37f; --accent2:#2d8fd5;
-  --warn:#e5a23a; --err:#e05555; --interim:#7d8a97;
+  --warn:#e5a23a; --err:#e05555; --interim:#7d8a97; --draft:#8fb7a3;
 }
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--text);
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
   font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans Bengali","Segoe UI",sans-serif;
   -webkit-text-size-adjust:100%}
-body{min-height:100dvh;display:flex;flex-direction:column;
+body{height:100dvh;display:flex;flex-direction:column;overflow:hidden;
   padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
-header{display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--line)}
-header h1{font-size:16px;margin:0;flex:1;letter-spacing:.02em}
+header{display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--line);flex:none}
+header h1{font-size:15px;margin:0;flex:1;letter-spacing:.02em}
 .iconbtn{background:var(--panel2);border:1px solid var(--line);color:var(--text);
-  border-radius:10px;padding:7px 11px;font-size:14px}
-#status{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--sub);padding:6px 16px;flex-wrap:wrap}
+  border-radius:10px;padding:6px 10px;font-size:14px}
+#status{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--sub);padding:5px 16px;flex-wrap:wrap;flex:none}
 .dot{width:9px;height:9px;border-radius:50%;background:#555}
 .dot.on{background:var(--accent);box-shadow:0 0 8px var(--accent)}
 .dot.busy{background:var(--warn)}
 .dot.err{background:var(--err)}
-.chip{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:2px 8px}
-#log{flex:1;overflow-y:auto;padding:8px 16px 16px;display:flex;flex-direction:column;gap:10px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
-.card .time{font-size:11px;color:var(--sub);margin-bottom:4px;display:flex;justify-content:space-between}
-.src{font-size:16px;line-height:1.5;color:#cfd8e0}
-.tr{margin-top:6px;font-size:20px;line-height:1.45;font-weight:600}
-.tr.en{font-size:17px;font-weight:500;color:#bfe3ff}
-.tr.pending{color:var(--interim);font-weight:400;font-size:15px}
-.tr.error{color:var(--err);font-size:13px;font-weight:400}
-.lbl{display:inline-block;font-size:10px;color:var(--sub);border:1px solid var(--line);border-radius:4px;padding:0 4px;margin-right:6px;vertical-align:middle;font-weight:400}
-#interim{padding:0 16px 6px;min-height:26px;color:var(--interim);font-size:15px;font-style:italic}
-footer{border-top:1px solid var(--line);padding:10px 16px 12px;display:flex;flex-direction:column;gap:10px;background:var(--bg)}
+.chip{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:1px 8px}
+.warnbar{background:#3a2c12;color:#f3d39a;font-size:12px;padding:6px 16px;line-height:1.5;flex:none}
+
+/* ===== 上下2段 ===== */
+#panes{flex:1;min-height:0;display:flex;flex-direction:column}
+.pane{position:relative;min-height:0;display:flex;flex-direction:column;background:var(--panel)}
+#paneSrc{flex:1}
+#paneTr{flex:1.35;border-top:2px solid var(--line);background:#0d1115}
+.paneHead{flex:none;display:flex;justify-content:space-between;align-items:center;
+  font-size:11px;color:var(--sub);padding:6px 16px 2px;letter-spacing:.05em}
+.paneBody{flex:1;overflow-y:auto;padding:4px 16px 12px;-webkit-overflow-scrolling:touch}
+.seg{padding:3px 0;border-radius:6px;scroll-margin:40px}
+.seg.hl{background:rgba(45,143,213,.18)}
+#paneSrc .seg{font-size:17px;line-height:1.55;color:#cfd8e0}
+#paneSrc .seg .t{font-size:10px;color:var(--sub);margin-right:6px;vertical-align:middle}
+#paneTr .seg{font-size:22px;line-height:1.5;font-weight:600;margin-bottom:6px}
+#paneTr .seg .en{display:block;font-size:16px;font-weight:500;color:#bfe3ff;margin-top:2px}
+#paneTr .seg.pending{color:var(--interim);font-weight:400;font-size:15px}
+#paneTr .seg .err{color:var(--err);font-size:13px;font-weight:400}
+.cursor::after{content:"▍";color:var(--accent);animation:blink 1s steps(1) infinite;margin-left:1px}
+@keyframes blink{50%{opacity:0}}
+.tail{min-height:1.4em}
+#srcTail{font-size:17px;line-height:1.55;color:var(--interim);font-style:italic}
+#trTail{font-size:20px;line-height:1.5;color:var(--draft);font-weight:500}
+#trTail .en{display:block;font-size:15px;color:#8fb2c8}
+.jump{position:absolute;right:12px;bottom:10px;background:var(--accent2);color:#fff;border:0;border-radius:999px;
+  padding:5px 12px;font-size:12px;display:none;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+.jump.show{display:block}
+.empty{color:var(--sub);font-size:13px;padding:8px 0;line-height:1.6}
+
+footer{border-top:1px solid var(--line);padding:8px 16px 10px;display:flex;flex-direction:column;gap:8px;background:var(--bg);flex:none}
 .row{display:flex;gap:8px;align-items:center}
-.seg{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:10px;overflow:hidden;flex:1}
-.seg button{flex:1;background:none;border:0;color:var(--sub);padding:8px 4px;font-size:13px}
-.seg button.sel{background:var(--accent2);color:#fff}
-#mic{width:100%;border:0;border-radius:16px;padding:16px;font-size:18px;font-weight:700;
+.segc{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:10px;overflow:hidden;flex:1}
+.segc button{flex:1;background:none;border:0;color:var(--sub);padding:7px 4px;font-size:13px}
+.segc button.sel{background:var(--accent2);color:#fff}
+#mic{width:100%;border:0;border-radius:16px;padding:14px;font-size:18px;font-weight:700;
   background:var(--accent);color:#06140d}
 #mic.rec{background:var(--err);color:#fff}
 #level{height:4px;background:var(--panel2);border-radius:2px;overflow:hidden}
 #level>div{height:100%;width:0;background:var(--accent);transition:width .08s}
+#testbox{display:none}
+#testbox.open{display:flex}
+
 /* settings */
 #settings{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;z-index:10}
 #settings.open{display:block}
 #sheet{position:absolute;inset:auto 0 0 0;max-height:92dvh;overflow-y:auto;background:var(--panel);
   border-radius:18px 18px 0 0;padding:16px 16px calc(24px + env(safe-area-inset-bottom))}
 #sheet h2{font-size:17px;margin:0 0 4px}
-#sheet h3{font-size:13px;color:var(--sub);margin:18px 0 6px;text-transform:uppercase;letter-spacing:.06em}
+#sheet h3{font-size:13px;color:var(--sub);margin:18px 0 6px;letter-spacing:.06em}
 label{display:block;font-size:13px;color:var(--sub);margin:10px 0 4px}
 input,select,textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--line);
   border-radius:10px;padding:10px;font-size:16px;font-family:inherit}
@@ -64,9 +86,6 @@ textarea{min-height:64px}
 .btn{background:var(--accent2);color:#fff;border:0;border-radius:10px;padding:10px 14px;font-size:15px}
 .btn.ghost{background:var(--panel2);border:1px solid var(--line)}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-#testbox{display:none}
-#testbox.open{display:flex}
-.warnbar{background:#3a2c12;color:#f3d39a;font-size:12px;padding:6px 16px;line-height:1.5}
 </style>
 </head>
 <body>
@@ -82,15 +101,34 @@ textarea{min-height:64px}
   <span class="chip" id="chipStt"></span><span class="chip" id="chipTr"></span>
   <span class="chip" id="chipTimer" style="display:none"></span>
 </div>
-<div id="log"></div>
-<div id="interim"></div>
+
+<main id="panes">
+  <section class="pane" id="paneSrc">
+    <div class="paneHead"><span>🎙 聞き取り（アッサム語）</span><span id="srcCount"></span></div>
+    <div class="paneBody" id="srcBody">
+      <div class="empty" id="emptyMsg">「● 聞き取り開始」を押すと、上に聞き取った言葉、下に翻訳が流れていきます。</div>
+      <div id="srcList"></div>
+      <div class="tail" id="srcTail"></div>
+    </div>
+    <button class="jump" id="srcJump">↓ 最新へ</button>
+  </section>
+  <section class="pane" id="paneTr">
+    <div class="paneHead"><span id="trHead">🌐 翻訳（日本語）</span><span></span></div>
+    <div class="paneBody" id="trBody">
+      <div id="trList"></div>
+      <div class="tail" id="trTail"></div>
+    </div>
+    <button class="jump" id="trJump">↓ 最新へ</button>
+  </section>
+</main>
+
 <footer>
   <div class="row" id="testbox">
     <input id="testInput" placeholder="アッサム語テキストを貼り付けて翻訳テスト">
     <button class="btn" id="testGo">翻訳</button>
   </div>
   <div class="row">
-    <div class="seg" id="targetSeg">
+    <div class="segc" id="targetSeg">
       <button data-v="ja">日本語</button><button data-v="en">English</button><button data-v="both">両方</button>
     </div>
   </div>
@@ -139,6 +177,14 @@ textarea{min-height:64px}
     <input id="trModel" list="trModels" autocomplete="off" autocapitalize="off">
     <datalist id="trModels"></datalist>
     <div class="hint" id="trHint"></div>
+    <label>話している途中も訳す（仮訳）</label>
+    <select id="draftOn">
+      <option value="on">オン（どんどん訳を出す）</option>
+      <option value="off">オフ（話し終わってから訳す）</option>
+    </select>
+    <label>仮訳の間隔（秒）</label>
+    <input id="draftSec" type="number" step="0.5" min="0.5" max="10">
+    <div class="hint">仮訳は Gemini Live のときに働きます。間隔を短くすると速くなりますが、翻訳APIの呼び出し回数（料金）が増えます。</div>
 
     <h3>③ 文脈・専門用語（精度アップ用・任意）</h3>
     <label>場面の説明（翻訳AIに渡します）</label>
@@ -181,13 +227,13 @@ const STT_MODELS = {
 const TR_MODELS = {
   gemini: {list:['gemini-3.5-flash-lite','gemini-3.8-flash','gemini-4-hydrogen'], def:'gemini-3.5-flash-lite',
     hint:'flash-lite が速くて安い。精度重視なら gemini-4-hydrogen。'},
-  google: {list:['nmt'], def:'nmt', hint:'Google翻訳エンジン。最速・最安ですが文脈は考慮しません。'},
+  google: {list:['nmt'], def:'nmt', hint:'Google翻訳エンジン。最速・最安ですが文脈は考慮せず、文字単位の流し表示もありません。'},
   openai: {list:['gpt-5.6-luna','gpt-5.6-terra','gpt-6.1-terra'], def:'gpt-5.6-luna', hint:'luna が軽量・高速、terra が高精度。'},
   claude: {list:['claude-haiku-5-5','claude-sonnet-5-5','claude-opus-5-5'], def:'claude-haiku-5-5', hint:'Haiku が高速、Sonnet が高精度。'},
 };
 const DEFAULTS = {
   sttEngine:'gemini-live', sttModel:'', sttLang:'as', silenceSec:0.8, maxSec:12, vadThresh:0.012,
-  trEngine:'gemini', trModel:'', target:'ja', context:'', vocab:'',
+  trEngine:'gemini', trModel:'', target:'ja', draftOn:'on', draftSec:1.5, context:'', vocab:'',
   keyGemini:'', keyOpenai:'', keyClaude:'', keyGct:'',
 };
 const LS = 'assamTranslator.v1';
@@ -200,7 +246,7 @@ function loadSettings(){
 function saveSettings(){ try{ localStorage.setItem(LS, JSON.stringify(S)); }catch(e){} }
 
 const $ = id => document.getElementById(id);
-const FIELDS = ['sttEngine','sttModel','sttLang','silenceSec','maxSec','vadThresh','trEngine','trModel','context','vocab','keyGemini','keyOpenai','keyClaude','keyGct'];
+const FIELDS = ['sttEngine','sttModel','sttLang','silenceSec','maxSec','vadThresh','trEngine','trModel','draftOn','draftSec','context','vocab','keyGemini','keyOpenai','keyClaude','keyGct'];
 
 function fillDatalist(dl, list){ dl.innerHTML = list.map(m=>`<option value="${m}">`).join(''); }
 function syncSettingsUI(){
@@ -223,9 +269,17 @@ function sameFamilyTr(eng, m){
   return eng==='gemini' ? /^gemini/.test(m) : eng==='openai' ? /^(gpt|o\d)/.test(m)
        : eng==='claude' ? /^claude/.test(m) : eng==='google' ? m==='nmt' : true;
 }
+function readField(f){
+  const el=$(f); const v = el.type==='number' ? parseFloat(el.value) : el.value.trim();
+  if(el.type==='number' && isNaN(v)) return;
+  S[f] = v;
+}
+function readAllFields(){ FIELDS.forEach(f=>{ if(f!=='sttEngine' && f!=='trEngine') readField(f); }); saveSettings(); updateChips(); }
 FIELDS.forEach(f=>{
+  // iPhoneでは貼り付け後に change が来ないことがあるため、入力のたびに保存
+  $(f).addEventListener('input', ()=>{ readField(f); saveSettings(); });
   $(f).addEventListener('change', ()=>{
-    const el=$(f); S[f] = el.type==='number' ? parseFloat(el.value) : el.value.trim();
+    readField(f);
     if(f==='sttEngine') S.sttModel='';
     if(f==='trEngine') S.trModel='';
     saveSettings(); syncSettingsUI();
@@ -235,11 +289,12 @@ function updateChips(){
   $('chipStt').textContent = '字幕: ' + S.sttModel;
   $('chipTr').textContent  = '翻訳: ' + (S.trEngine==='google' ? 'Google翻訳' : S.trModel);
   document.querySelectorAll('#targetSeg button').forEach(b=>b.classList.toggle('sel', b.dataset.v===S.target));
+  $('trHead').textContent = '🌐 翻訳（' + ({ja:'日本語',en:'English',both:'日本語＋English'}[S.target]) + '）';
 }
 document.querySelectorAll('#targetSeg button').forEach(b=>b.onclick=()=>{ S.target=b.dataset.v; saveSettings(); updateChips(); });
 $('btnSettings').onclick = ()=>$('settings').classList.add('open');
-$('closeSettings').onclick = ()=>{ $('settings').classList.remove('open'); };
-$('settings').addEventListener('click', e=>{ if(e.target.id==='settings') $('settings').classList.remove('open'); });
+$('closeSettings').onclick = ()=>{ readAllFields(); $('settings').classList.remove('open'); showWarn(''); if(!running) setState('待機中',''); };
+$('settings').addEventListener('click', e=>{ if(e.target.id==='settings'){ readAllFields(); $('settings').classList.remove('open'); } });
 $('btnText').onclick = ()=>$('testbox').classList.toggle('open');
 
 /* ============ 状態表示 ============ */
@@ -251,32 +306,72 @@ function sttLangCodes(bcp){ // bcp=true → as-IN style
   const m = bcp ? {as:'as-IN',en:'en-IN',hi:'hi-IN'} : {as:'as',en:'en',hi:'hi'};
   return S.sttLang.split('+').map(x=>m[x]);
 }
+function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function now(){ return new Date().toTimeString().slice(0,8); }
+
+/* ============ 上下ペイン（自動スクロール） ============ */
+function makeScroller(bodyId, jumpId){
+  const body=$(bodyId), jump=$(jumpId); let stick=true;
+  body.addEventListener('scroll', ()=>{ stick = body.scrollHeight - body.scrollTop - body.clientHeight < 60; jump.classList.toggle('show', !stick); });
+  jump.onclick = ()=>{ stick=true; body.scrollTop=body.scrollHeight; jump.classList.remove('show'); };
+  return { bottom(){ if(stick) body.scrollTop = body.scrollHeight; } };
+}
+const srcScroll = makeScroller('srcBody','srcJump');
+const trScroll  = makeScroller('trBody','trJump');
+function setSrcTail(text){ $('srcTail').textContent = text||''; srcScroll.bottom(); }
+function setTrTail(r){
+  const el=$('trTail');
+  if(!r){ el.innerHTML=''; return; }
+  let h='';
+  if(S.target!=='en' && r.ja) h += esc(r.ja);
+  if(S.target!=='ja' && r.en) h += (S.target==='both' ? `<span class="en">${esc(r.en)}</span>` : esc(r.en));
+  el.innerHTML = h ? h + ' …' : '';
+  trScroll.bottom();
+}
 
 /* ============ 記録 ============ */
-const entries = []; // {t, src, ja, en, el}
-function now(){ const d=new Date(); return d.toTimeString().slice(0,8); }
-function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+const entries = []; // {i,t,src,ja,en,err,streaming,srcEl,trEl}
 function addEntry(src, meta){
-  const e = {t:now(), src, ja:null, en:null, err:null, meta:meta||''};
-  const el = document.createElement('div'); el.className='card';
-  e.el = el; entries.push(e); renderEntry(e);
-  $('log').appendChild(el); scrollBottom();
+  $('emptyMsg').style.display='none';
+  const e = {i:entries.length, t:now(), src, ja:null, en:null, err:null, streaming:false, meta:meta||''};
+  e.srcEl = document.createElement('div'); e.srcEl.className='seg';
+  e.srcEl.innerHTML = `<span class="t">${e.t}</span>${esc(src)}`;
+  e.trEl = document.createElement('div'); e.trEl.className='seg';
+  e.srcEl.onclick = ()=>linkTo(e, 'tr'); e.trEl.onclick = ()=>linkTo(e, 'src');
+  $('srcList').appendChild(e.srcEl); $('trList').appendChild(e.trEl);
+  entries.push(e); renderEntry(e);
+  $('srcCount').textContent = entries.length + ' 件';
+  srcScroll.bottom();
   return e;
 }
-function renderEntry(e){
-  const want = S.target;
-  let tr = '';
-  if(e.err) tr = `<div class="tr error">翻訳エラー: ${esc(e.err)}</div>`;
-  else {
-    if(want!=='en') tr += e.ja!=null ? `<div class="tr"><span class="lbl">JA</span>${esc(e.ja)}</div>` : `<div class="tr pending">翻訳中…</div>`;
-    if(want!=='ja') tr += e.en!=null ? `<div class="tr en"><span class="lbl">EN</span>${esc(e.en)}</div>` : (want==='en'?`<div class="tr pending">Translating…</div>`:'');
-  }
-  e.el.innerHTML = `<div class="time"><span>${e.t}</span><span>${esc(e.meta)}</span></div><div class="src">${esc(e.src)}</div>${tr}`;
+function linkTo(e, where){
+  document.querySelectorAll('.seg.hl').forEach(x=>x.classList.remove('hl'));
+  e.srcEl.classList.add('hl'); e.trEl.classList.add('hl');
+  (where==='tr'?e.trEl:e.srcEl).scrollIntoView({block:'nearest', behavior:'smooth'});
+  setTimeout(()=>{ e.srcEl.classList.remove('hl'); e.trEl.classList.remove('hl'); }, 2500);
 }
-let stick = true;
-$('log').addEventListener('scroll', ()=>{ const l=$('log'); stick = l.scrollHeight - l.scrollTop - l.clientHeight < 80; });
-function scrollBottom(){ if(stick){ const l=$('log'); l.scrollTop = l.scrollHeight; } }
-$('btnClear').onclick = ()=>{ if(confirm('表示中の記録をすべて消去しますか？')){ entries.length=0; $('log').innerHTML=''; } };
+function renderEntry(e){
+  const want=S.target, el=e.trEl;
+  if(e.err){ el.className='seg'; el.innerHTML = `<span class="err">翻訳エラー: ${esc(e.err)}</span>`; trScroll.bottom(); return; }
+  const hasJa = e.ja!=null && e.ja!=='', hasEn = e.en!=null && e.en!=='';
+  if(!hasJa && !hasEn){
+    el.className='seg pending' + (e.streaming?' cursor':'');
+    el.textContent = e.streaming ? '' : (e.ja===''||e.en==='' ? '（訳なし）' : '翻訳中…');
+    trScroll.bottom(); return;
+  }
+  el.className='seg';
+  let h='';
+  if(want!=='en' && hasJa) h += esc(e.ja);
+  if(want!=='ja' && hasEn) h += want==='both' ? `<span class="en">${esc(e.en)}</span>` : esc(e.en);
+  el.innerHTML = h;
+  if(e.streaming) el.classList.add('cursor');
+  trScroll.bottom();
+}
+$('btnClear').onclick = ()=>{
+  if(!confirm('表示中の記録をすべて消去しますか？')) return;
+  entries.length=0; $('srcList').innerHTML=''; $('trList').innerHTML=''; $('srcCount').textContent='';
+  $('emptyMsg').style.display='';
+};
 $('btnExport').onclick = ()=>{
   if(!entries.length){ alert('まだ記録がありません'); return; }
   const txt = entries.map(e=>`[${e.t}]\nAS: ${e.src}` + (e.ja?`\nJA: ${e.ja}`:'') + (e.en?`\nEN: ${e.en}`:'')).join('\n\n');
@@ -287,37 +382,39 @@ $('btnExport').onclick = ()=>{
   else { const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); }
 };
 
-/* ============ 翻訳 ============ */
+/* ============ 翻訳（ストリーミング） ============ */
 const trQueue = []; let trBusy = false;
 function requestTranslation(entry){ trQueue.push(entry); pumpTr(); }
 async function pumpTr(){
   if(trBusy) return; trBusy = true;
   while(trQueue.length){
     const e = trQueue.shift();
+    e.streaming = true; renderEntry(e);
     try{
-      const r = await translate(e.src, contextBefore(e));
+      const r = await translateStream(e.src, contextBefore(e), p=>{ e.ja=p.ja??e.ja; e.en=p.en??e.en; renderEntry(e); });
       e.ja = r.ja ?? null; e.en = r.en ?? null;
-      if(S.target==='ja' && e.ja==null) e.ja='';
-      if(S.target==='en' && e.en==null) e.en='';
+      if(S.target!=='en' && e.ja==null) e.ja='';
+      if(S.target!=='ja' && e.en==null) e.en='';
     }catch(err){ e.err = err.message||String(err); }
-    renderEntry(e); scrollBottom();
+    e.streaming = false; renderEntry(e);
   }
   trBusy = false;
 }
 function contextBefore(e){
   const i = entries.indexOf(e);
-  return entries.slice(Math.max(0,i-4), i).map(x=>x.src).join('\n');
+  return entries.slice(Math.max(0,i-4), i<0?entries.length:i).map(x=>x.src).join('\n');
 }
-function trPrompt(text, prev){
+function trPrompt(text, prev, partial){
   const want = S.target;
   const out = want==='both'
-    ? 'Return ONLY a JSON object: {"ja":"<Japanese translation>","en":"<English translation>"}.'
-    : `Return ONLY the ${want==='ja'?'Japanese':'English'} translation, nothing else.`;
+    ? 'Output exactly two lines and nothing else:\nJA: <Japanese translation>\nEN: <English translation>'
+    : `Output ONLY the ${want==='ja'?'Japanese':'English'} translation, nothing else.`;
   return [
-    'You are a professional interpreter translating spoken Assamese (অসমীয়া) into ' + (want==='both'?'Japanese and English':want==='ja'?'natural Japanese':'natural English') + '.',
+    'You are a professional simultaneous interpreter translating spoken Assamese (অসমীয়া) into ' + (want==='both'?'Japanese and English':want==='ja'?'natural Japanese':'natural English') + '.',
     'The source is real-time speech recognition output: it may contain recognition errors, missing punctuation, or code-mixed English/Hindi words. Infer the intended meaning, but do not invent content.',
+    partial ? 'The speaker is still talking, so the text may end mid-sentence. Translate what is there so far; do not complete the sentence.' : '',
     'If the text is already English or Hindi, still translate it to the target language(s).',
-    'If the input is empty noise or meaningless, return an empty translation.',
+    'If the input is empty noise or meaningless, output nothing.',
     S.context ? 'Situation: ' + S.context : '',
     vocabList().length ? 'Key terms: ' + vocabList().join(', ') : '',
     prev ? 'Previous utterances (context only, do not translate):\n' + prev : '',
@@ -327,13 +424,13 @@ function trPrompt(text, prev){
   ].filter(Boolean).join('\n');
 }
 function parseTrOut(raw){
-  raw = (raw||'').trim();
+  raw = (raw||'').replace(/^```[a-z]*\n?|```\s*$/g,'').trim();
   if(S.target==='both'){
-    const m = raw.match(/\{[\s\S]*\}/);
-    if(m){ try{ const j = JSON.parse(m[0]); return {ja:j.ja||'', en:j.en||''}; }catch(e){} }
+    const ja = raw.match(/JA\s*[:：]\s*([\s\S]*?)(?=\n\s*EN\s*[:：]|$)/);
+    const en = raw.match(/EN\s*[:：]\s*([\s\S]*)$/);
+    if(ja || en) return {ja: ja?ja[1].trim():'', en: en?en[1].trim():''};
     return {ja:raw, en:''};
   }
-  raw = raw.replace(/^```[a-z]*\n?|```$/g,'').trim();
   return S.target==='ja' ? {ja:raw} : {en:raw};
 }
 async function fetchJSON(url, opt, timeoutMs=30000){
@@ -346,46 +443,71 @@ async function fetchJSON(url, opt, timeoutMs=30000){
   }catch(e){ if(e.name==='AbortError') throw new Error('タイムアウト（回線を確認）'); throw e; }
   finally{ clearTimeout(to); }
 }
+// SSE（data: 行）を読みながら onData を呼ぶ
+async function streamSSE(url, opt, onData, extSignal, timeoutMs=45000){
+  const ctl = new AbortController(); const to = setTimeout(()=>ctl.abort(), timeoutMs);
+  const onExt = ()=>ctl.abort(); if(extSignal){ if(extSignal.aborted) ctl.abort(); else extSignal.addEventListener('abort', onExt); }
+  try{
+    const res = await fetch(url, Object.assign({signal:ctl.signal}, opt));
+    if(!res.ok){ const txt = await res.text(); let j=null; try{ j=JSON.parse(txt); }catch(e){}
+      const m = Array.isArray(j) ? j[0]?.error?.message : (j?.error?.message || j?.error?.type);
+      throw new Error(`${res.status} ${m || txt.slice(0,200)}`); }
+    const handle = line=>{ line=line.trim(); if(!line.startsWith('data:')) return; const d=line.slice(5).trim(); if(!d || d==='[DONE]') return; let j; try{ j=JSON.parse(d); }catch(e){ return; } onData(j); };
+    if(!res.body || !res.body.getReader){ (await res.text()).split('\n').forEach(handle); return; }
+    const reader = res.body.getReader(), dec = new TextDecoder(); let buf='';
+    for(;;){
+      const {done, value} = await reader.read(); if(done) break;
+      buf += dec.decode(value, {stream:true});
+      let i; while((i = buf.indexOf('\n')) >= 0){ handle(buf.slice(0,i)); buf = buf.slice(i+1); }
+    }
+    if(buf) handle(buf);
+  }catch(e){
+    if(e.name==='AbortError'){ if(extSignal?.aborted) throw e; throw new Error('タイムアウト（回線を確認）'); }
+    throw e;
+  }finally{ clearTimeout(to); if(extSignal) extSignal.removeEventListener('abort', onExt); }
+}
 function needKey(k, name){ if(!S[k]) throw new Error(`${name} のAPIキーが未設定です（⚙︎設定）`); return S[k]; }
 
-async function translate(text, prev){
+async function translateStream(text, prev, onPartial, signal, partial){
   const eng = S.trEngine, model = S.trModel;
   if(eng==='google'){
     const key = needKey('keyGct','Google Cloud Translation');
     const one = async tgt => {
       const j = await fetchJSON('https://translation.googleapis.com/language/translate/v2?key='+encodeURIComponent(key),
-        {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({q:text, source:'as', target:tgt, format:'text', model:'nmt'})});
+        {method:'POST', headers:{'Content-Type':'application/json'}, signal, body:JSON.stringify({q:text, source:'as', target:tgt, format:'text', model:'nmt'})});
       return decodeHTML(j.data.translations[0].translatedText);
     };
     const r = {};
-    if(S.target!=='en') r.ja = await one('ja');
-    if(S.target!=='ja') r.en = await one('en');
+    const [ja, en] = await Promise.all([S.target!=='en'?one('ja'):null, S.target!=='ja'?one('en'):null]);
+    if(ja!=null) r.ja=ja; if(en!=null) r.en=en;
     return r;
   }
-  const prompt = trPrompt(text, prev);
+  const prompt = trPrompt(text, prev, partial);
+  let acc = '', streamErr = null;
+  const push = t=>{ if(!t) return; acc += t; onPartial && onPartial(parseTrOut(acc)); };
   if(eng==='gemini'){
     const key = needKey('keyGemini','Gemini');
-    const j = await fetchJSON(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`,
+    await streamSSE(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`,
       {method:'POST', headers:{'Content-Type':'application/json'},
-       body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}], generationConfig:{temperature:0.2}})});
-    return parseTrOut(geminiText(j));
-  }
-  if(eng==='openai'){
+       body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}], generationConfig:{temperature:0.2}})},
+      j=>{ if(j.error) streamErr=j.error.message; push(geminiText(j)); }, signal);
+  } else if(eng==='openai'){
     const key = needKey('keyOpenai','OpenAI');
-    const j = await fetchJSON('https://api.openai.com/v1/chat/completions',
+    await streamSSE('https://api.openai.com/v1/chat/completions',
       {method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-       body:JSON.stringify({model, messages:[{role:'user',content:prompt}]})});
-    return parseTrOut(j.choices?.[0]?.message?.content);
-  }
-  if(eng==='claude'){
+       body:JSON.stringify({model, stream:true, messages:[{role:'user',content:prompt}]})},
+      j=>{ if(j.error) streamErr=j.error.message; push(j.choices?.[0]?.delta?.content); }, signal);
+  } else if(eng==='claude'){
     const key = needKey('keyClaude','Anthropic');
-    const j = await fetchJSON('https://api.anthropic.com/v1/messages',
+    await streamSSE('https://api.anthropic.com/v1/messages',
       {method:'POST', headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01',
         'anthropic-dangerous-direct-browser-access':'true'},
-       body:JSON.stringify({model, max_tokens:1024, messages:[{role:'user',content:prompt}]})});
-    return parseTrOut((j.content||[]).filter(c=>c.type==='text').map(c=>c.text).join(''));
-  }
-  throw new Error('不明な翻訳エンジン');
+       body:JSON.stringify({model, max_tokens:1024, stream:true, messages:[{role:'user',content:prompt}]})},
+      j=>{ if(j.type==='error') streamErr=j.error?.message||'stream error';
+           if(j.type==='content_block_delta' && j.delta?.type==='text_delta') push(j.delta.text); }, signal);
+  } else throw new Error('不明な翻訳エンジン');
+  if(streamErr && !acc) throw new Error(streamErr);
+  return parseTrOut(acc);
 }
 function geminiText(j){
   const parts = j?.candidates?.[0]?.content?.parts || [];
@@ -393,15 +515,35 @@ function geminiText(j){
 }
 function decodeHTML(s){ const t=document.createElement('textarea'); t.innerHTML=s; return t.value; }
 
+/* ============ 仮訳（話している途中の翻訳） ============ */
+const Draft = {
+  text:'', lastSent:'', inflight:false, ctl:null, timer:null, gen:0,
+  start(){ this.stop(); this.timer = setInterval(()=>this.tick(), 250); this.lastAt=0; },
+  stop(){ clearInterval(this.timer); this.timer=null; this.clear(); },
+  update(src){ this.text = src||''; },
+  clear(){ this.gen++; try{ this.ctl && this.ctl.abort(); }catch(e){} this.ctl=null; this.inflight=false; this.text=''; this.lastSent=''; setTrTail(null); },
+  tick(){
+    if(S.draftOn!=='on' || this.inflight || !this.text) return;
+    if(this.text === this.lastSent || this.text.length < 4) return;
+    if(Date.now() - (this.lastAt||0) < S.draftSec*1000) return;
+    this.lastAt = Date.now(); this.lastSent = this.text; this.inflight = true;
+    const gen = this.gen, ctl = new AbortController(); this.ctl = ctl;
+    translateStream(this.text, contextBefore({}), p=>{ if(gen===this.gen) setTrTail(p); }, ctl.signal, true)
+      .then(r=>{ if(gen===this.gen) setTrTail(r); })
+      .catch(()=>{})
+      .finally(()=>{ if(gen===this.gen){ this.inflight=false; this.ctl=null; } });
+  }
+};
+
 $('testGo').onclick = ()=>{
   const v = $('testInput').value.trim(); if(!v) return;
+  readAllFields();
   const e = addEntry(v, 'テキスト入力'); requestTranslation(e); $('testInput').value='';
 };
 
 /* ============ マイク・音声処理 ============ */
 let audioCtx=null, stream=null, srcNode=null, procNode=null, running=false, wakeLock=null;
 let onPCM16k = null; // callback(Int16Array 16kHz)
-let onLevel = null;
 
 async function startAudio(){
   stream = await navigator.mediaDevices.getUserMedia({audio:{channelCount:1, echoCancellation:true, noiseSuppression:true, autoGainControl:true}});
@@ -413,11 +555,9 @@ async function startAudio(){
   let carry = 0;
   procNode.onaudioprocess = ev=>{
     const inp = ev.inputBuffer.getChannelData(0);
-    // RMS
     let sum=0; for(let i=0;i<inp.length;i++) sum+=inp[i]*inp[i];
     const rms = Math.sqrt(sum/inp.length);
-    // downsample (box filter average) to 16kHz
-    const outLen = Math.floor((inp.length - carry) / ratio);
+    const outLen = Math.max(0, Math.floor((inp.length - carry) / ratio));
     const out = new Int16Array(outLen);
     let pos = carry;
     for(let i=0;i<outLen;i++){
@@ -428,9 +568,8 @@ async function startAudio(){
       pos += ratio;
     }
     carry = pos - inp.length; if(carry<0) carry=0;
-    if(onLevel) onLevel(rms);
+    $('level').firstElementChild.style.width = Math.min(100, rms*600)+'%';
     if(onPCM16k) onPCM16k(out, rms);
-    // silence output
     ev.outputBuffer.getChannelData(0).fill(0);
   };
   srcNode.connect(procNode); procNode.connect(audioCtx.destination);
@@ -450,7 +589,6 @@ document.addEventListener('visibilitychange', async ()=>{
     if(audioCtx && audioCtx.state!=='running') audioCtx.resume().catch(()=>{});
   }
 });
-onLevel = rms => { $('level').firstElementChild.style.width = Math.min(100, rms*600)+'%'; };
 
 function b64FromBytes(bytes){
   let bin=''; const CH=0x8000;
@@ -479,6 +617,7 @@ const LiveEngine = {
   async start(){
     needKey('keyGemini','Gemini');
     this.closing=false; await this.connect();
+    Draft.start();
     onPCM16k = (pcm)=>{
       this.sendBuf.push(pcm); this.sendLen += pcm.length;
       if(this.sendLen >= 1600){ // ~100ms
@@ -523,11 +662,11 @@ const LiveEngine = {
         const sc = m.serverContent;
         if(sc?.interimInputTranscription){
           this.interimText = sc.interimInputTranscription.text || '';
-          $('interim').textContent = this.interimText;
+          setSrcTail(this.interimText); Draft.update(this.interimText);
         }
         if(sc?.inputTranscription){
           const t = (sc.inputTranscription.text||'').trim();
-          $('interim').textContent=''; this.interimText='';
+          this.interimText=''; setSrcTail(''); Draft.clear();
           if(t){ const e = addEntry(t, sc.inputTranscription.languageCode||''); requestTranslation(e); }
         }
         if(m.goAway && !this.rotating) this.rotate();
@@ -562,8 +701,9 @@ const LiveEngine = {
     this.closing=true; clearInterval(this.timer); clearTimeout(this.reconnectTimer);
     const ws=this.ws; this.ws=null;
     try{ if(ws && ws.readyState===1){ ws.send(JSON.stringify({realtimeInput:{audioStreamEnd:true}})); setTimeout(()=>ws.close(),1500); } else ws && ws.close(); }catch(e){}
+    Draft.stop();
     if(this.interimText){ const e=addEntry(this.interimText,'途中'); requestTranslation(e); }
-    this.interimText=''; $('interim').textContent=''; $('chipTimer').style.display='none'; this.sessionStart=0;
+    this.interimText=''; setSrcTail(''); $('chipTimer').style.display='none'; this.sessionStart=0;
   }
 };
 
@@ -578,10 +718,9 @@ const ChunkEngine = {
       const ms = pcm.length/16;
       const voiced = rms > S.vadThresh;
       if(!this.len){
-        // 発話待ち：直前0.3秒を保持
         this.pre.push(pcm); let pl=this.pre.reduce((a,c)=>a+c.length,0);
         while(pl > 4800 && this.pre.length>1){ pl-=this.pre.shift().length; }
-        if(voiced){ this.buf=[...this.pre]; this.len=pl; this.pre=[]; this.silentMs=0; this.voicedMs=ms; $('interim').textContent='🎙 発話を検出…'; }
+        if(voiced){ this.buf=[...this.pre]; this.len=pl; this.pre=[]; this.silentMs=0; this.voicedMs=ms; this.status(); }
         return;
       }
       this.buf.push(pcm); this.len+=pcm.length;
@@ -590,16 +729,32 @@ const ChunkEngine = {
       if(this.silentMs >= S.silenceSec*1000 || durMs >= S.maxSec*1000) this.flush();
     };
   },
+  status(){
+    const parts=[]; if(this.len) parts.push('🎙 発話中…'); if(this.inflight) parts.push('⏳ 文字起こし中（'+this.inflight+'）');
+    setSrcTail(parts.join('　'));
+  },
   flush(){
     const pcm = concatI16(this.buf); const voicedMs=this.voicedMs;
     this.buf=[]; this.len=0; this.silentMs=0; this.voicedMs=0;
-    if(voicedMs < 250){ $('interim').textContent=''; return; } // ノイズ
-    this.inflight++; $('interim').textContent='⏳ 文字起こし中…（'+this.inflight+'件）';
-    this.transcribe(pcm).then(t=>{
-      t=(t||'').trim();
-      if(t && !/^\[?(silence|noise|無音)\]?$/i.test(t)){ const e=addEntry(t, (pcm.length/16000).toFixed(1)+'秒'); requestTranslation(e); }
-    }).catch(err=>{ showWarn('文字起こしエラー: '+err.message); setTimeout(()=>showWarn(''),6000); })
-      .finally(()=>{ this.inflight--; $('interim').textContent = this.inflight? '⏳ 文字起こし中…（'+this.inflight+'件）' : ''; });
+    if(voicedMs < 250){ this.status(); return; } // ノイズ
+    // 発話順を保つため、先に枠を確保しておく
+    this.inflight++; this.status();
+    const order = (this.seq = (this.seq||0)+1);
+    this.pending = this.pending || new Map();
+    const p = this.transcribe(pcm).then(t=>({t:(t||'').trim(), dur:(pcm.length/16000).toFixed(1)}))
+      .catch(err=>{ showWarn('文字起こしエラー: '+err.message); setTimeout(()=>showWarn(''),6000); return {t:''}; });
+    this.pending.set(order, p);
+    this.drain();
+  },
+  async drain(){
+    if(this.draining) return; this.draining=true;
+    this.next = this.next || 1;
+    while(this.pending.has(this.next)){
+      const r = await this.pending.get(this.next); this.pending.delete(this.next); this.next++;
+      this.inflight--; this.status();
+      if(r.t && !/^\[?(silence|noise|無音)\]?$/i.test(r.t)){ const e=addEntry(r.t, r.dur+'秒'); requestTranslation(e); }
+    }
+    this.draining=false;
   },
   async transcribe(pcm){
     const wav = wavFromI16(pcm);
@@ -622,13 +777,14 @@ const ChunkEngine = {
       return j.text;
     }
   },
-  stop(){ if(this.len) this.flush(); this.pre=[]; }
+  stop(){ if(this.len) this.flush(); this.pre=[]; if(!this.inflight) setSrcTail(''); }
 };
 
 /* ============ 開始・停止 ============ */
 let engine = null;
 $('mic').onclick = async ()=>{
   if(running){ stop(); return; }
+  readAllFields();
   showWarn('');
   if(!navigator.mediaDevices?.getUserMedia){ showWarn('このブラウザ（またはhttp接続）ではマイクが使えません。https のURLで開いてください。'); return; }
   try{
@@ -650,6 +806,7 @@ function stop(keepState){
 
 /* ============ キー接続テスト ============ */
 $('btnKeyCheck').onclick = async ()=>{
+  readAllFields();
   const out=$('keyCheckOut'); out.textContent='テスト中…';
   const res=[];
   const test = async (name, fn)=>{ try{ await fn(); res.push('✅ '+name); }catch(e){ res.push('❌ '+name+': '+e.message); } out.innerHTML = res.map(esc).join('<br>'); };
