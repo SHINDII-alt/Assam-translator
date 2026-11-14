@@ -75,7 +75,8 @@ header{gap:6px}
 footer{border-top:1px solid var(--line);padding:6px 12px 8px;display:flex;flex-direction:column;gap:6px;background:var(--bg);flex:none}
 #viewSeg{flex:none;margin-left:auto;border-radius:8px}
 #viewSeg button{padding:4px 9px;font-size:11px;flex:none}
-#targetSeg{flex:1.1}
+#targetSeg{flex:1.2;min-width:0}
+#targetSeg button{white-space:nowrap;padding:7px 2px;font-size:12.5px}
 #panes.v-tr #paneSrc, #panes.v-tr #divider{display:none}
 #panes.v-src #paneTr, #panes.v-src #divider{display:none}
 #panes.v-tr #paneTr, #panes.v-src #paneSrc{flex:1 1 0 !important}
@@ -88,6 +89,9 @@ footer{border-top:1px solid var(--line);padding:6px 12px 8px;display:flex;flex-d
 #mic.rec{background:var(--err);color:#fff}
 #level{height:4px;background:var(--panel2);border-radius:2px;overflow:hidden}
 #level>div{height:100%;width:0;background:var(--accent);transition:width .08s}
+#btnWipe{flex:none;width:48px;align-self:stretch;border-radius:12px;border:1px solid var(--line);
+  background:var(--panel2);color:var(--text);font-size:20px;transition:background .2s}
+#btnWipe.done{background:var(--accent2)}
 #testbox{display:none}
 #testInput{flex:1;min-width:0;padding:9px 10px}
 #testGo{flex:none;white-space:nowrap;padding:9px 16px;min-width:64px}
@@ -160,6 +164,7 @@ textarea{min-height:64px}
     <div class="segc" id="targetSeg">
       <button data-v="ja">日本語</button><button data-v="en">EN</button><button data-v="both">両方</button>
     </div>
+    <button id="btnWipe" title="画面の文字をクリア（記録は書き出しに残ります）">🧹</button>
     <button id="mic">● 開始</button>
   </div>
 </footer>
@@ -233,6 +238,15 @@ textarea{min-height:64px}
     <label>Google Cloud Translation</label>
     <input id="keyGct" type="password" autocomplete="off" placeholder="AIza...">
     <div class="hint">使うエンジンのキーだけ入れればOKです。Gemini 1本で文字起こし＋翻訳の両方ができます。</div>
+
+    <h3>APIキーのバックアップ</h3>
+    <div class="hint">キーが消えてしまった時のために、キーと設定をまとめた「復元コード」を作れます。コピーして安全な場所（パスワード管理アプリなど）に保存し、消えた時は下の欄に貼り付けて「復元」を押してください。コードにはAPIキーが含まれるので、他人には送らないでください。</div>
+    <div class="grid2" style="margin-top:8px">
+      <button class="btn ghost" id="btnBackup">復元コードをコピー</button>
+      <button class="btn ghost" id="btnRestore">復元</button>
+    </div>
+    <input id="restoreCode" type="password" autocomplete="off" placeholder="復元コードを貼り付け" style="margin-top:8px">
+    <div class="hint" id="backupOut"></div>
 
     <h3>その他</h3>
     <div class="grid2">
@@ -524,14 +538,24 @@ function renderEntry(e){
   if(e.streaming) el.classList.add('cursor');
   trScroll.bottom();
 }
+const archive = []; // 画面からクリアした分（書き出しには含める）
+function clearScreen(){
+  archive.push(...entries); entries.length=0;
+  $('srcList').innerHTML=''; $('trList').innerHTML=''; $('srcCount').textContent='';
+  $('srcTail').textContent=''; $('trTail').innerHTML='';
+}
+$('btnWipe').onclick = ()=>{
+  clearScreen();
+  const b=$('btnWipe'); b.classList.add('done'); setTimeout(()=>b.classList.remove('done'), 600);
+};
 $('btnClear').onclick = ()=>{
-  if(!confirm('表示中の記録をすべて消去しますか？')) return;
-  entries.length=0; $('srcList').innerHTML=''; $('trList').innerHTML=''; $('srcCount').textContent='';
-  $('emptyMsg').style.display='';
+  if(!confirm('書き出し用の記録も含めて、すべて消去しますか？')) return;
+  clearScreen(); archive.length=0; $('emptyMsg').style.display='';
 };
 $('btnExport').onclick = ()=>{
-  if(!entries.length){ alert('まだ記録がありません'); return; }
-  const txt = entries.map(e=>`[${e.t}]\nAS: ${e.src}` + (e.ja?`\nJA: ${e.ja}`:'') + (e.en?`\nEN: ${e.en}`:'')).join('\n\n');
+  const all = archive.concat(entries);
+  if(!all.length){ alert('まだ記録がありません'); return; }
+  const txt = all.map(e=>`[${e.t}]\nAS: ${e.src}` + (e.ja?`\nJA: ${e.ja}`:'') + (e.en?`\nEN: ${e.en}`:'')).join('\n\n');
   const name = 'assam_translation_' + new Date().toISOString().slice(0,16).replace(/[:T]/g,'-') + '.txt';
   const blob = new Blob([txt], {type:'text/plain'});
   const file = new File([blob], name, {type:'text/plain'});
@@ -978,8 +1002,37 @@ $('btnKeyCheck').onclick = async ()=>{
   if(!res.length) out.textContent='APIキーが入力されていません';
 };
 
+/* ============ キーのバックアップ・復元 ============ */
+$('btnBackup').onclick = async ()=>{
+  readAllFields();
+  const code = 'ASSAM1:' + btoa(unescape(encodeURIComponent(JSON.stringify(S))));
+  try{ await navigator.clipboard.writeText(code); $('backupOut').textContent='✅ コピーしました。パスワード管理アプリなどに保存してください。'; }
+  catch(e){ $('restoreCode').type='text'; $('restoreCode').value=code; $('restoreCode').select();
+    $('backupOut').textContent='自動コピーできませんでした。上の欄のコードを長押ししてコピーしてください。'; }
+};
+$('btnRestore').onclick = ()=>{
+  const v = $('restoreCode').value.trim();
+  try{
+    if(!v.startsWith('ASSAM1:')) throw 0;
+    const obj = JSON.parse(decodeURIComponent(escape(atob(v.slice(7)))));
+    S = Object.assign({}, DEFAULTS, obj); saveSettings(); syncSettingsUI();
+    $('restoreCode').value=''; $('restoreCode').type='password';
+    $('backupOut').textContent='✅ 復元しました。「キー接続テスト」で確認してください。';
+  }catch(e){ $('backupOut').textContent='❌ 復元コードが正しくありません。'; }
+};
+
+/* ============ 保存できるかの確認 ============ */
+function storageWorks(){
+  try{ const k='assamTranslator.test'; localStorage.setItem(k,'1'); const ok=localStorage.getItem(k)==='1'; localStorage.removeItem(k); return ok; }
+  catch(e){ return false; }
+}
+// iPhoneに「このサイトのデータを消さないで」と依頼（対応ブラウザのみ）
+try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch(e){}
+
 /* ============ 初期化 ============ */
 syncSettingsUI();
+if(location.protocol!=='file:' && !storageWorks())
+  showWarn('⚠️ このブラウザでは設定・APIキーを保存できません。プライベートモードをやめるか、iPhoneの「設定 → アプリ → Safari →『すべてのCookieをブロック』」をオフにしてください。');
 if(location.protocol==='file:') showWarn('ファイルを直接開いています。iPhoneでマイクを使うには https のURLで開いてください。');
 if(!S.keyGemini && !S.keyOpenai) setTimeout(()=>$('settings').classList.add('open'), 300);
 </script>
