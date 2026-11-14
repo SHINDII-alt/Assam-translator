@@ -135,7 +135,7 @@ textarea{min-height:64px}
 
 <main id="panes">
   <section class="pane" id="paneSrc">
-    <div class="paneHead"><span>🎙 聞き取り（アッサム語）</span><span id="srcCount"></span></div>
+    <div class="paneHead"><span id="srcHead">🎙 聞き取り（アッサム語）</span><span id="srcCount"></span></div>
     <div class="paneBody" id="srcBody">
       <div class="empty" id="emptyMsg">「● 開始」を押すと、上に聞き取った言葉、下に翻訳が流れていきます。</div>
       <div id="srcList"></div>
@@ -276,7 +276,7 @@ textarea{min-height:64px}
       <button class="btn ghost" id="btnKeyCheck">キー接続テスト</button>
     </div>
     <div class="hint" id="keyCheckOut"></div>
-    <div class="hint" style="margin-top:14px;opacity:.7">版：2026-11-15 Sarvam対応</div>
+    <div class="hint" style="margin-top:14px;opacity:.7">版：2026-11-15b 翻訳の同時処理</div>
     <div class="hint" style="margin-top:14px">医療面談で使う場合は、相手の同意を得て、重要な判断に関わる内容は必ず人（通訳者）が確認してください。AIの翻訳は誤る可能性があります。</div>
   </div>
 </div>
@@ -404,6 +404,8 @@ function updateChips(){
   $('chipStt').textContent = '字幕: ' + S.sttModel;
   $('chipTr').textContent  = '翻訳: ' + (S.trEngine==='google' ? 'Google翻訳' : S.trModel);
   document.querySelectorAll('#targetSeg button').forEach(b=>b.classList.toggle('sel', b.dataset.v===S.target));
+  const sttName = {'gemini-live':'Gemini','gemini-chunk':'Gemini','sarvam-live':'Sarvam','sarvam-chunk':'Sarvam','openai-chunk':'OpenAI'}[S.sttEngine]||'';
+  $('srcHead').textContent = '🎙 聞き取り（' + ({as:'アッサム語のみ','as+en+hi':'アッサム語＋英語・ヒンディー語',auto:'自動判定'}[S.sttLang]||'アッサム語') + (sttName?' · '+sttName:'') + '）';
   $('trHead').textContent = '🌐 翻訳（' + ({ja:'日本語',en:'English',both:'日本語＋English'}[S.target]) + '）';
 }
 document.querySelectorAll('#targetSeg button').forEach(b=>b.onclick=()=>{ S.target=b.dataset.v; saveSettings(); updateChips(); });
@@ -622,12 +624,17 @@ $('btnExport').onclick = ()=>{
 };
 
 /* ============ 翻訳（ストリーミング） ============ */
-const trQueue = []; let trBusy = false;
+// 翻訳は最大3件まで同時に進める（1件ずつ待たせない）。表示位置は各発言の枠なので順番は崩れない
+const trQueue = []; let trActive = 0; const TR_MAX = 3;
 function requestTranslation(entry){ trQueue.push(entry); pumpTr(); }
-async function pumpTr(){
-  if(trBusy) return; trBusy = true;
-  while(trQueue.length){
-    const e = trQueue.shift();
+function pumpTr(){
+  while(trActive < TR_MAX && trQueue.length){
+    const e = trQueue.shift(); trActive++;
+    runTranslation(e).finally(()=>{ trActive--; pumpTr(); });
+  }
+}
+async function runTranslation(e){
+  {
     e.streaming = true; e.t0 = performance.now(); e.wait = (e.t0 - (e.tq||e.t0))/1000; renderEntry(e);
     try{
       const r = await translateStream(e.src, contextBefore(e), p=>{ e.ja=p.ja??e.ja; e.en=p.en??e.en; renderEntry(e); });
@@ -639,7 +646,6 @@ async function pumpTr(){
     const lat = (performance.now() - (e.t0||performance.now()))/1000;
     const tEl = e.srcEl.querySelector('.t'); if(tEl) tEl.textContent = `${e.t} · 翻訳 ${lat.toFixed(1)}秒` + (e.wait>0.3?`（待ち ${e.wait.toFixed(1)}秒）`:'');
   }
-  trBusy = false;
 }
 function contextBefore(e){
   const i = entries.indexOf(e);
@@ -788,7 +794,7 @@ const Draft = {
   take(){ const r=this.lastResult; this.clear(); return r; },
   tick(){
     if(S.draftOn!=='on' || this.inflight || !this.text) return;
-    if(trBusy) return;                                  // 本番の翻訳を優先
+    if(trActive >= TR_MAX || trQueue.length) return;    // 本番の翻訳を優先
     if(Date.now() < (this.pauseUntil||0)) return;       // 回数制限中は休む
     if(this.text === this.lastSent || this.text.length < 4) return;
     if(Date.now() - (this.lastAt||0) < S.draftSec*1000) return;
@@ -1000,6 +1006,14 @@ const SarvamLive = {
   async start(){
     needKey('keySarvam','Sarvam AI');
     this.closing=false; this.noMode=false;
+    if(TEAM()){
+      // 先にサーバーの状態を確認して、分かりやすい理由を出す
+      let h;
+      try{ h = await fetchJSON(teamBase()+'/health', {headers:{'X-App-Password':S.teamPass}}, 15000); }
+      catch(e){ throw new Error('チーム用サーバーに接続できません: ' + e.message); }
+      if(!('sarvam' in h)) throw new Error('Cloudflare の worker.js が古いままです。最新の worker.js を「Edit code」で貼り替えて「Deploy」してください。');
+      if(!h.sarvam) throw new Error('Cloudflare に SARVAM_API_KEY が登録されていません（Settings → Variables and Secrets）。');
+    }
     await this.connect();
     Draft.start();
     onPCM16k = pcm=>{
@@ -1054,7 +1068,9 @@ const SarvamLive = {
           settled=true;
           // mode=codemix が使えないモデルの場合は mode なしで再接続
           if(ev.code===4000 && !this.noMode && S.sttLang==='as+en+hi'){ this.noMode=true; this.connect().then(resolve, reject); return; }
-          const why = ev.code===1003 ? '（APIキー・残高・回数制限）' : ev.code===4000 ? '（設定値かアカウントの権限）' : '';
+          const why = ev.code===1003 ? '（APIキー・残高・回数制限を確認）'
+            : ev.code===4000 ? '（リアルタイム機能がこのアカウントで使えない可能性。「Sarvam AI 回線が弱い時用」を試してください）'
+            : ev.code===1006 ? '（接続が拒否されました。キー・残高、またはリアルタイム機能の権限を確認。「Sarvam AI 回線が弱い時用」を試してください）' : '';
           reject(new Error(`Sarvamに接続できません: ${ev.code} ${ev.reason||''}${why}`)); return;
         }
         if(!this.closing && running){
