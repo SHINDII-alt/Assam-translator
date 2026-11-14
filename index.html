@@ -187,8 +187,8 @@ textarea{min-height:64px}
     <div class="hint" id="sttHint"></div>
     <label>言語</label>
     <select id="sttLang">
-      <option value="as">アッサム語のみ</option>
-      <option value="as+en+hi">アッサム語＋英語・ヒンディー語混じり</option>
+      <option value="as+en+hi">アッサム語＋英語・ヒンディー語混じり（おすすめ）</option>
+      <option value="as">アッサム語のみ（英語が混じらない会話向け）</option>
       <option value="auto">自動判定</option>
     </select>
 
@@ -291,7 +291,7 @@ const MODEL_LABELS = {
   'claude-opus-5-5':'Claude Opus 5.5（最高精度・遅い）',
 };
 const DEFAULTS = {
-  sttEngine:'gemini-live', sttModel:'', sttLang:'as', silenceSec:0.8, maxSec:12, vadThresh:0.012,
+  sttEngine:'gemini-live', sttModel:'', sttLang:'as+en+hi', silenceSec:0.8, maxSec:12, vadThresh:0.012,
   trEngine:'gemini', trModel:'', target:'ja', draftOn:'on', draftSec:1.5, scrollSpeed:'normal', context:'', vocab:'',
   keyGemini:'', keyOpenai:'', keyClaude:'', keyGct:'',
 };
@@ -301,6 +301,7 @@ function loadSettings(){
   let s = {};
   try{ s = JSON.parse(localStorage.getItem(LS)||'{}'); }catch(e){}
   delete s.silenceSec; delete s.maxSec; delete s.vadThresh; // 固定値を使う
+  if(!s.v3){ s.sttLang='as+en+hi'; s.v3=true; } // 英語混じり対応を標準に（一度だけ）
   const RETIRED = ['gpt-5.6-luna','gpt-5.6-terra','gpt-4o-transcribe','whisper-1']; // 旧世代は標準モデルへ
   if(RETIRED.includes(s.trModel)) s.trModel=''; if(RETIRED.includes(s.sttModel)) s.sttModel='';
   return Object.assign({}, DEFAULTS, s);
@@ -488,7 +489,7 @@ function setTrTail(r){
 const entries = []; // {i,t,src,ja,en,err,streaming,srcEl,trEl}
 function addEntry(src, meta, draft){
   $('emptyMsg').style.display='none';
-  const e = {i:entries.length, t:now(), src, ja:null, en:null, err:null, streaming:false, meta:meta||'', draft:draft||null};
+  const e = {i:entries.length, tq:performance.now(), t:now(), src, ja:null, en:null, err:null, streaming:false, meta:meta||'', draft:draft||null};
   e.srcEl = document.createElement('div'); e.srcEl.className='seg';
   e.srcEl.innerHTML = `<span class="t">${e.t}</span>${esc(brk(src))}`;
   e.trEl = document.createElement('div'); e.trEl.className='seg';
@@ -570,7 +571,7 @@ async function pumpTr(){
   if(trBusy) return; trBusy = true;
   while(trQueue.length){
     const e = trQueue.shift();
-    e.streaming = true; renderEntry(e);
+    e.streaming = true; e.t0 = performance.now(); e.wait = (e.t0 - (e.tq||e.t0))/1000; renderEntry(e);
     try{
       const r = await translateStream(e.src, contextBefore(e), p=>{ e.ja=p.ja??e.ja; e.en=p.en??e.en; renderEntry(e); });
       e.ja = r.ja ?? null; e.en = r.en ?? null;
@@ -578,6 +579,8 @@ async function pumpTr(){
       if(S.target!=='ja' && e.en==null) e.en='';
     }catch(err){ e.err = err.message||String(err); }
     e.streaming = false; e.done = true; renderEntry(e);
+    const lat = (performance.now() - (e.t0||performance.now()))/1000;
+    const tEl = e.srcEl.querySelector('.t'); if(tEl) tEl.textContent = `${e.t} · 翻訳 ${lat.toFixed(1)}秒` + (e.wait>0.3?`（待ち ${e.wait.toFixed(1)}秒）`:'');
   }
   trBusy = false;
 }
@@ -595,6 +598,7 @@ function trPrompt(text, prev, partial){
     'The source is real-time speech recognition output: it may contain recognition errors, missing punctuation, or code-mixed English/Hindi words. Infer the intended meaning, but do not invent content.',
     partial ? 'The speaker is still talking, so the text may end mid-sentence. Translate what is there so far; do not complete the sentence.' : '',
     'If the text is already English or Hindi, still translate it to the target language(s).',
+    'IMPORTANT: English (and Hindi) words are often written phonetically in Assamese/Bengali script by the recognizer (e.g. চেনেল = channel, টেষ্ট = test, ডাক্তাৰ = doctor, মেডিচিন = medicine). Recognize such loanwords by their sound and translate them by their English meaning.',
     'If the input is empty noise or meaningless, output nothing.',
     S.context ? 'Situation: ' + S.context : '',
     vocabList().length ? 'Key terms: ' + vocabList().join(', ') : '',
@@ -707,6 +711,8 @@ const Draft = {
   take(){ const r=this.lastResult; this.clear(); return r; },
   tick(){
     if(S.draftOn!=='on' || this.inflight || !this.text) return;
+    if(trBusy) return;                                  // 本番の翻訳を優先
+    if(Date.now() < (this.pauseUntil||0)) return;       // 回数制限中は休む
     if(this.text === this.lastSent || this.text.length < 4) return;
     if(Date.now() - (this.lastAt||0) < S.draftSec*1000) return;
     this.lastAt = Date.now(); this.lastSent = this.text; this.inflight = true;
@@ -714,7 +720,11 @@ const Draft = {
     // 途中経過は表示せず、完成した仮訳だけを一度に差し替える（画面が消えない）
     translateStream(this.text, contextBefore({}), null, ctl.signal, true)
       .then(r=>{ if(gen===this.gen && (r.ja||r.en)){ this.lastResult = r; setTrTail(r); } })
-      .catch(()=>{})
+      .catch(err=>{
+        // 回数制限（429）や混雑（503）なら、仮訳を20秒休んで本番の翻訳に回数を残す
+        if(/^(429|503)/.test(err?.message||'')){ this.pauseUntil = Date.now()+20000;
+          showWarn('翻訳APIの回数制限に達したため、仮訳を20秒停止しています（確定した訳は続きます）'); setTimeout(()=>showWarn(''), 6000); }
+      })
       .finally(()=>{ if(gen===this.gen){ this.inflight=false; this.ctl=null; } });
   }
 };
