@@ -252,14 +252,14 @@ const STT_MODELS = {
     hint:'話している途中から字幕が出ます。1セッション10分上限のため、9分半で自動的につなぎ直します。'},
   'gemini-chunk': {list:['gemini-3.5-flash-lite','gemini-3.8-flash','gemini-4-hydrogen'], def:'gemini-3.5-flash-lite',
     hint:'話し終わって少し間が空くごとに、まとめて送ります。字幕は数秒遅れますが、回線が不安定でも途切れにくい方式です。'},
-  'openai-chunk': {list:['gpt-transcribe','gpt-4o-transcribe'], def:'gpt-transcribe',
+  'openai-chunk': {list:['gpt-transcribe'], def:'gpt-transcribe',
     hint:'OpenAIのアッサム語対応は公式に明記されていません。比較用として使ってください。'},
 };
 const TR_MODELS = {
   gemini: {list:['gemini-3.5-flash-lite','gemini-3.8-flash','gemini-4-hydrogen'], def:'gemini-3.5-flash-lite',
     hint:'flash-lite が速くて安い。精度重視なら gemini-4-hydrogen。'},
   google: {list:['nmt'], def:'nmt', hint:'Google翻訳エンジン。最速・最安ですが文脈は考慮せず、文字単位の流し表示もありません。'},
-  openai: {list:['gpt-6-luna','gpt-6.1-terra','gpt-6.1-sol','gpt-5.6-luna'], def:'gpt-6-luna', hint:'GPT-6 Luna が軽量・高速、6.1 Terra がバランス型、6.1 Sol が高性能。'},
+  openai: {list:['gpt-6-luna','gpt-6.1-terra','gpt-6.1-sol'], def:'gpt-6-luna', hint:'GPT-6 Luna が軽量・高速、6.1 Terra がバランス型、6.1 Sol が高性能。'},
   claude: {list:['claude-haiku-5-5','claude-sonnet-5-5','claude-opus-5-5'], def:'claude-haiku-5-5', hint:'Haiku が高速、Sonnet が高精度。'},
 };
 const MODEL_LABELS = {
@@ -267,13 +267,11 @@ const MODEL_LABELS = {
   'gemini-3.5-flash-lite':'Gemini 3.5 Flash-Lite（速い・安い）',
   'gemini-3.8-flash':'Gemini 3.8 Flash（バランス）',
   'gemini-4-hydrogen':'Gemini 4 Hydrogen（高精度・やや遅い）',
-  'gpt-transcribe':'gpt-transcribe（推奨）',
-  'gpt-4o-transcribe':'gpt-4o-transcribe（旧・2027年2月終了）',
+  'gpt-transcribe':'gpt-transcribe（標準）',
   'nmt':'Google翻訳（標準）',
   'gpt-6-luna':'GPT-6 Luna（速い・安い）',
   'gpt-6.1-terra':'GPT-6.1 Terra（バランス）',
   'gpt-6.1-sol':'GPT-6.1 Sol（高性能・やや遅い）',
-  'gpt-5.6-luna':'GPT-5.6 Luna（旧世代）',
   'claude-haiku-5-5':'Claude Haiku 5.5（速い・安い）',
   'claude-sonnet-5-5':'Claude Sonnet 5.5（高精度）',
   'claude-opus-5-5':'Claude Opus 5.5（最高精度・遅い）',
@@ -289,6 +287,8 @@ function loadSettings(){
   let s = {};
   try{ s = JSON.parse(localStorage.getItem(LS)||'{}'); }catch(e){}
   delete s.silenceSec; delete s.maxSec; delete s.vadThresh; // 固定値を使う
+  const RETIRED = ['gpt-5.6-luna','gpt-5.6-terra','gpt-4o-transcribe','whisper-1']; // 旧世代は標準モデルへ
+  if(RETIRED.includes(s.trModel)) s.trModel=''; if(RETIRED.includes(s.sttModel)) s.sttModel='';
   return Object.assign({}, DEFAULTS, s);
 }
 function saveSettings(){ try{ localStorage.setItem(LS, JSON.stringify(S)); }catch(e){} }
