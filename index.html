@@ -276,7 +276,7 @@ textarea{min-height:64px}
       <button class="btn ghost" id="btnKeyCheck">キー接続テスト</button>
     </div>
     <div class="hint" id="keyCheckOut"></div>
-    <div class="hint" style="margin-top:14px;opacity:.7">版：2026-11-15b 翻訳の同時処理</div>
+    <div class="hint" style="margin-top:14px;opacity:.7">版：2026-11-15c 取りこぼし対策</div>
     <div class="hint" style="margin-top:14px">医療面談で使う場合は、相手の同意を得て、重要な判断に関わる内容は必ず人（通訳者）が確認してください。AIの翻訳は誤る可能性があります。</div>
   </div>
 </div>
@@ -446,6 +446,14 @@ function cleanTranscript(text, lang){
   t = t.replace(/\s{2,}/g,' ').trim();
   if(!/[\p{L}]/u.test(t)) return '';
   return t;
+}
+/* 確定版が途中の字幕より明らかに短い時は、画面に出ていた途中の字幕を採用する（取りこぼし防止） */
+function pickFinal(finalText, interimText){
+  const f = String(finalText||'').trim(), p = String(interimText||'').trim();
+  if(!f) return p;
+  if(!p) return f;
+  if(p.length > f.length && (p.includes(f) || p.length >= f.length*1.5)) return p;
+  return f;
 }
 function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function now(){ return new Date().toTimeString().slice(0,8); }
@@ -957,7 +965,7 @@ const LiveEngine = {
           setSrcTail(this.interimText); Draft.update(this.interimText);
         }
         if(sc?.inputTranscription){
-          const t = cleanTranscript(sc.inputTranscription.text, sc.inputTranscription.languageCode);
+          const t = pickFinal(cleanTranscript(sc.inputTranscription.text, sc.inputTranscription.languageCode), this.interimText);
           this.interimText=''; setSrcTail('');
           const carry = Draft.take();
           if(t){ const e = addEntry(t, sc.inputTranscription.languageCode||'', carry); requestTranslation(e); }
@@ -1003,9 +1011,15 @@ const LiveEngine = {
 /* ============ エンジン: Sarvam AI リアルタイム（WebSocket） ============ */
 const SarvamLive = {
   ws:null, ready:false, closing:false, interimText:'', sendBuf:[], sendLen:0, pingTimer:null, noMode:false, reconnectTimer:null,
+  parts:new Map(), curIdx:null,
+  commitStale(idx){
+    if(!this.parts.has(idx)) return;               // 確定版が届いていれば何もしない
+    const text = this.parts.get(idx); this.parts.delete(idx);
+    if(text){ const e = addEntry(text, 'Sarvam'); requestTranslation(e); }
+  },
   async start(){
     needKey('keySarvam','Sarvam AI');
-    this.closing=false; this.noMode=false;
+    this.closing=false; this.noMode=false; this.parts = new Map(); this.curIdx = null;
     if(TEAM()){
       // 先にサーバーの状態を確認して、分かりやすい理由を出す
       let h;
@@ -1049,13 +1063,26 @@ const SarvamLive = {
         const type = m.event || m.type;
         if(type==='session.begin'){ ok(); return; }
         if(type==='transcript.partial'){
+          const idx = m.utterance_idx ?? 'u';
+          // 前の発言の確定版が来ないまま次の発言が始まったら、少し待って途中の字幕を記録する
+          if(this.curIdx!=null && idx!==this.curIdx && this.parts.has(this.curIdx)){
+            const old = this.curIdx; setTimeout(()=>this.commitStale(old), 2500);
+          }
+          this.curIdx = idx;
           this.interimText = cleanTranscript(m.text, m.language);
+          if(this.interimText) this.parts.set(idx, this.interimText);
           setSrcTail(this.interimText); Draft.update(this.interimText);
         }
         if(type==='transcript.final'){
-          const tx = cleanTranscript(m.text, m.language);
-          this.interimText=''; setSrcTail('');
-          const carry = Draft.take();
+          const idx = m.utterance_idx ?? this.curIdx ?? 'u';
+          // これより前の発言で確定版が来ていないものは、順番が崩れないよう先に記録
+          if(typeof idx==='number') for(const k of [...this.parts.keys()]) if(typeof k==='number' && k<idx) this.commitStale(k);
+          const shown = this.parts.get(idx) || (idx===this.curIdx ? this.interimText : '');
+          this.parts.delete(idx);
+          const tx = pickFinal(cleanTranscript(m.text, m.language), shown);
+          const isCurrent = idx===this.curIdx;
+          if(isCurrent){ this.interimText=''; setSrcTail(''); }
+          const carry = isCurrent ? Draft.take() : null;
           if(tx){ const e = addEntry(tx, 'Sarvam', carry); requestTranslation(e); }
         }
         if(type==='error'){ showWarn('Sarvam: ' + (m.message || m.code || 'エラー')); }
@@ -1086,7 +1113,10 @@ const SarvamLive = {
     const ws=this.ws; this.ws=null;
     try{ if(ws && ws.readyState===1){ ws.send(JSON.stringify({event:'end'})); setTimeout(()=>ws.close(),1500); } else ws && ws.close(); }catch(e){}
     const carry = Draft.lastResult; Draft.stop();
-    if(this.interimText){ const e=addEntry(this.interimText,'途中', carry); requestTranslation(e); }
+    for(const [idx, text] of this.parts){ if(text && idx!==this.curIdx){ const e=addEntry(text,'途中'); requestTranslation(e); } }
+    const cur = this.parts.get(this.curIdx) || this.interimText;
+    if(cur){ const e=addEntry(cur,'途中', carry); requestTranslation(e); }
+    this.parts = new Map(); this.curIdx = null;
     this.interimText=''; setSrcTail('');
   }
 };
