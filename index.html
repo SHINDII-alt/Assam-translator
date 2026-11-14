@@ -24,7 +24,7 @@ header h1{font-size:14px;margin:0;flex:1;min-width:0;letter-spacing:.02em;white-
 header{gap:6px}
 .iconbtn{background:var(--panel2);border:1px solid var(--line);color:var(--text);
   border-radius:10px;padding:6px 9px;font-size:13px;flex:none;min-width:34px}
-#status{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--sub);padding:5px 16px;flex-wrap:wrap;flex:none}
+#status{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--sub);padding:4px 12px;flex:none}
 .dot{width:9px;height:9px;border-radius:50%;background:#555}
 .dot.on{background:var(--accent);box-shadow:0 0 8px var(--accent)}
 .dot.busy{background:var(--warn)}
@@ -72,17 +72,25 @@ header{gap:6px}
 .jump.show{display:block}
 .empty{color:var(--sub);font-size:13px;padding:8px 0;line-height:1.6}
 
-footer{border-top:1px solid var(--line);padding:8px 16px 10px;display:flex;flex-direction:column;gap:8px;background:var(--bg);flex:none}
+footer{border-top:1px solid var(--line);padding:6px 12px 8px;display:flex;flex-direction:column;gap:6px;background:var(--bg);flex:none}
+#viewSeg{flex:none;margin-left:auto;border-radius:8px}
+#viewSeg button{padding:4px 9px;font-size:11px;flex:none}
+#targetSeg{flex:1.1}
+#panes.v-tr #paneSrc, #panes.v-tr #divider{display:none}
+#panes.v-src #paneTr, #panes.v-src #divider{display:none}
+#panes.v-tr #paneTr, #panes.v-src #paneSrc{flex:1 1 0 !important}
 .row{display:flex;gap:8px;align-items:center}
 .segc{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:10px;overflow:hidden;flex:1}
 .segc button{flex:1;background:none;border:0;color:var(--sub);padding:7px 4px;font-size:13px}
 .segc button.sel{background:var(--accent2);color:#fff}
-#mic{width:100%;border:0;border-radius:16px;padding:14px;font-size:18px;font-weight:700;
+#mic{flex:1;border:0;border-radius:12px;padding:11px 8px;font-size:17px;font-weight:700;white-space:nowrap;
   background:var(--accent);color:#06140d}
 #mic.rec{background:var(--err);color:#fff}
 #level{height:4px;background:var(--panel2);border-radius:2px;overflow:hidden}
 #level>div{height:100%;width:0;background:var(--accent);transition:width .08s}
 #testbox{display:none}
+#testInput{flex:1;min-width:0;padding:9px 10px}
+#testGo{flex:none;white-space:nowrap;padding:9px 16px;min-width:64px}
 #testbox.open{display:flex}
 
 /* settings */
@@ -114,15 +122,18 @@ textarea{min-height:64px}
 <div id="warn" class="warnbar" style="display:none"></div>
 <div id="status">
   <span class="dot" id="dot"></span><span id="stateText">待機中</span>
-  <span class="chip" id="chipStt"></span><span class="chip" id="chipTr"></span>
   <span class="chip" id="chipTimer" style="display:none"></span>
+  <span id="chipStt" hidden></span><span id="chipTr" hidden></span>
+  <div class="segc" id="viewSeg">
+    <button data-v="split">上下</button><button data-v="tr">翻訳だけ</button><button data-v="src">聞き取りだけ</button>
+  </div>
 </div>
 
 <main id="panes">
   <section class="pane" id="paneSrc">
     <div class="paneHead"><span>🎙 聞き取り（アッサム語）</span><span id="srcCount"></span></div>
     <div class="paneBody" id="srcBody">
-      <div class="empty" id="emptyMsg">「● 聞き取り開始」を押すと、上に聞き取った言葉、下に翻訳が流れていきます。</div>
+      <div class="empty" id="emptyMsg">「● 開始」を押すと、上に聞き取った言葉、下に翻訳が流れていきます。</div>
       <div id="srcList"></div>
       <div class="tail" id="srcTail"></div>
     </div>
@@ -141,16 +152,16 @@ textarea{min-height:64px}
 
 <footer>
   <div class="row" id="testbox">
-    <input id="testInput" placeholder="アッサム語テキストを貼り付けて翻訳テスト">
+    <input id="testInput" placeholder="アッサム語を貼り付け">
     <button class="btn" id="testGo">翻訳</button>
   </div>
+  <div id="level"><div></div></div>
   <div class="row">
     <div class="segc" id="targetSeg">
-      <button data-v="ja">日本語</button><button data-v="en">English</button><button data-v="both">両方</button>
+      <button data-v="ja">日本語</button><button data-v="en">EN</button><button data-v="both">両方</button>
     </div>
+    <button id="mic">● 開始</button>
   </div>
-  <div id="level"><div></div></div>
-  <button id="mic">● 聞き取り開始</button>
 </footer>
 
 <div id="settings">
@@ -392,6 +403,16 @@ function makeScroller(bodyId, jumpId){
   const end=()=>{ if(!dragging) return; dragging=false; div.classList.remove('drag'); try{localStorage.setItem(KEY,ratio);}catch(_){}
     srcScroll.bottom(); trScroll.bottom(); };
   div.addEventListener('pointerup', end); div.addEventListener('pointercancel', end);
+})();
+/* 表示切替：上下 / 翻訳だけ / 聞き取りだけ */
+(function(){
+  const KEY='assamTranslator.view'; let v='split'; try{ v=localStorage.getItem(KEY)||'split'; }catch(e){}
+  const set=x=>{ v=x; const p=$('panes'); p.classList.remove('v-tr','v-src'); if(x!=='split') p.classList.add('v-'+x);
+    document.querySelectorAll('#viewSeg button').forEach(b=>b.classList.toggle('sel', b.dataset.v===x));
+    try{ localStorage.setItem(KEY,x); }catch(e){}
+    setTimeout(()=>{ srcScroll.bottom(); trScroll.bottom(); }); };
+  document.querySelectorAll('#viewSeg button').forEach(b=>b.onclick=()=>set(b.dataset.v));
+  set(v);
 })();
 /* 文字サイズ */
 (function(){
@@ -905,7 +926,7 @@ function stop(keepState){
   running=false;
   try{ engine && engine.stop(); }catch(e){}
   engine=null; stopAudio();
-  $('mic').classList.remove('rec'); $('mic').textContent='● 聞き取り開始';
+  $('mic').classList.remove('rec'); $('mic').textContent='● 開始';
   if(!keepState) setState('待機中','');
 }
 
