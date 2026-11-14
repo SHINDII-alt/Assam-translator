@@ -24,12 +24,17 @@ header h1{font-size:14px;margin:0;flex:1;min-width:0;letter-spacing:.02em;white-
 header{gap:6px}
 .iconbtn{background:var(--panel2);border:1px solid var(--line);color:var(--text);
   border-radius:10px;padding:6px 9px;font-size:13px;flex:none;min-width:34px}
-#status{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--sub);padding:4px 12px;flex:none}
+#status{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--sub);padding:4px 12px;flex:none;flex-wrap:wrap;row-gap:4px}
 .dot{width:9px;height:9px;border-radius:50%;background:#555}
 .dot.on{background:var(--accent);box-shadow:0 0 8px var(--accent)}
 .dot.busy{background:var(--warn)}
 .dot.err{background:var(--err)}
 .chip{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:1px 8px}
+.lat{font-weight:600}
+.lat.fast{color:#4cc38a}.lat.mid{color:#e5b53a}.lat.slow{color:#ef6b6b}
+.gauge{display:inline-block;width:34px;height:6px;border-radius:3px;background:#2e3742;vertical-align:middle;margin:0 3px;overflow:hidden}
+.gauge>i{display:block;height:100%;border-radius:3px}
+.gauge>i.fast{background:#4cc38a}.gauge>i.mid{background:#e5b53a}.gauge>i.slow{background:#ef6b6b}
 .warnbar{background:#3a2c12;color:#f3d39a;font-size:12px;padding:6px 16px;line-height:1.5;flex:none}
 
 /* ===== 上下2段 ===== */
@@ -127,6 +132,7 @@ textarea{min-height:64px}
 <div id="status">
   <span class="dot" id="dot"></span><span id="stateText">待機中</span>
   <span class="chip" id="chipTimer" style="display:none"></span>
+  <span class="chip" id="chipLat" style="display:none"></span>
   <span id="chipStt" hidden></span><span id="chipTr" hidden></span>
   <div class="segc" id="viewSeg">
     <button data-v="split">上下</button><button data-v="tr">翻訳だけ</button><button data-v="src">聞き取りだけ</button>
@@ -276,7 +282,7 @@ textarea{min-height:64px}
       <button class="btn ghost" id="btnKeyCheck">キー接続テスト</button>
     </div>
     <div class="hint" id="keyCheckOut"></div>
-    <div class="hint" style="margin-top:14px;opacity:.7">版：2026-11-15d 日本語の除外強化</div>
+    <div class="hint" style="margin-top:14px;opacity:.7">版：2026-11-15e 遅延表示</div>
     <div class="hint" style="margin-top:14px">医療面談で使う場合は、相手の同意を得て、重要な判断に関わる内容は必ず人（通訳者）が確認してください。AIの翻訳は誤る可能性があります。</div>
   </div>
 </div>
@@ -554,11 +560,39 @@ function setTrTail(r){
 
 /* ============ 記録 ============ */
 const entries = []; // {i,t,src,ja,en,err,streaming,srcEl,trEl}
-function addEntry(src, meta, draft){
+/* 遅延の計測と表示 */
+const VAD = {lastVoice:0, lastEnd:0, speaking:false};
+function sttDelayNow(){                       // 直近の「話し終わり」から今までの秒数（リアルタイム方式の目安）
+  if(!VAD.lastEnd) return null;
+  const d = (performance.now() - VAD.lastEnd)/1000;
+  return d >= 0 && d < 20 ? d : null;
+}
+const STATS = {stt:[], tr:[]};
+const speedClass = v => v <= 1.5 ? 'fast' : v <= 3 ? 'mid' : 'slow';   // 緑 / 黄 / 赤
+function latHtml(v){ return `<span class="lat ${speedClass(v)}">${v.toFixed(1)}秒</span>`; }
+function gaugeHtml(v){ if(v==null) return '<span class="gauge"></span>—';
+  return `<span class="gauge"><i class="${speedClass(v)}" style="width:${Math.min(100, v/5*100)}%"></i></span>${latHtml(v)}`; }
+function pushStat(k, v){
+  if(v==null || !isFinite(v)) return;
+  STATS[k].push(v); if(STATS[k].length > 5) STATS[k].shift();
+  const avg = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
+  const c = $('chipLat'); c.style.display='';
+  c.innerHTML = `平均 聞き取り${gaugeHtml(avg(STATS.stt))}　翻訳${gaugeHtml(avg(STATS.tr))}`;
+}
+function setLabel(e){
+  const tEl = e.srcEl && e.srcEl.querySelector('.t'); if(!tEl) return;
+  const parts = [esc(e.t)];
+  if(e.stt!=null) parts.push(`聞き取り ${latHtml(e.stt)}`);
+  if(e.lat!=null) parts.push(`翻訳 ${latHtml(e.lat + (e.wait||0))}` + (e.wait>0.3 ? `（うち待ち ${e.wait.toFixed(1)}秒）` : ''));
+  tEl.innerHTML = parts.join(' · ');
+}
+function addEntry(src, meta, draft, stt){
   $('emptyMsg').style.display='none';
   const e = {i:entries.length, tq:performance.now(), t:now(), src, ja:null, en:null, err:null, streaming:false, meta:meta||'', draft:draft||null};
   e.srcEl = document.createElement('div'); e.srcEl.className='seg';
   e.srcEl.innerHTML = `<span class="t">${e.t}</span>${esc(brk(src))}`;
+  if(stt === undefined) stt = (running && !/テキスト|途中/.test(meta||'')) ? sttDelayNow() : null;
+  e.stt = stt; setLabel(e); pushStat('stt', stt);
   e.trEl = document.createElement('div'); e.trEl.className='seg';
   e.srcEl.onclick = ()=>linkTo(e, 'tr'); e.trEl.onclick = ()=>linkTo(e, 'src');
   $('srcList').appendChild(e.srcEl); $('trList').appendChild(e.trEl);
@@ -663,7 +697,7 @@ async function runTranslation(e){
     }catch(err){ e.err = err.message||String(err); }
     e.streaming = false; e.done = true; renderEntry(e);
     const lat = (performance.now() - (e.t0||performance.now()))/1000;
-    const tEl = e.srcEl.querySelector('.t'); if(tEl) tEl.textContent = `${e.t} · 翻訳 ${lat.toFixed(1)}秒` + (e.wait>0.3?`（待ち ${e.wait.toFixed(1)}秒）`:'');
+    e.lat = lat; setLabel(e); if(!e.err) pushStat('tr', lat + (e.wait||0));
   }
 }
 function contextBefore(e){
@@ -866,6 +900,10 @@ async function startAudio(){
     }
     carry = pos - inp.length; if(carry<0) carry=0;
     $('level').firstElementChild.style.width = Math.min(100, rms*600)+'%';
+    // 話し終わりの時刻を推定（聞き取りの遅延表示に使う）
+    const nowT = performance.now();
+    if(rms > S.vadThresh){ VAD.lastVoice = nowT; VAD.speaking = true; }
+    else if(VAD.speaking && nowT - VAD.lastVoice > 300){ VAD.speaking = false; VAD.lastEnd = VAD.lastVoice; }
     if(onPCM16k) onPCM16k(out, rms);
     ev.outputBuffer.getChannelData(0).fill(0);
   };
@@ -1163,6 +1201,7 @@ const ChunkEngine = {
   },
   flush(){
     const pcm = concatI16(this.buf); const voicedMs=this.voicedMs;
+    const speechEnd = performance.now() - this.silentMs;   // 実際に話し終わった時刻
     this.buf=[]; this.len=0; this.silentMs=0; this.voicedMs=0;
     if(voicedMs < 250){ this.status(); return; } // ノイズ
     // 発話順を保つため、先に枠を確保しておく
@@ -1170,7 +1209,7 @@ const ChunkEngine = {
     const order = (this.seq = (this.seq||0)+1);
     this.pending = this.pending || new Map();
     const p = this.transcribe(pcm).then(r=>{ const o = (r && typeof r==='object') ? r : {text:r};
-        return {t: cleanTranscript(o.text, o.lang), dur:(pcm.length/16000).toFixed(1)}; })
+        return {t: cleanTranscript(o.text, o.lang), dur:(pcm.length/16000).toFixed(1), end:speechEnd}; })
       .catch(err=>{ showWarn('文字起こしエラー: '+err.message); setTimeout(()=>showWarn(''),6000); return {t:''}; });
     this.pending.set(order, p);
     this.drain();
@@ -1181,7 +1220,7 @@ const ChunkEngine = {
     while(this.pending.has(this.next)){
       const r = await this.pending.get(this.next); this.pending.delete(this.next); this.next++;
       this.inflight--; this.status();
-      if(r.t && !/^\[?(silence|noise|無音)\]?$/i.test(r.t)){ const e=addEntry(r.t, r.dur+'秒'); requestTranslation(e); }
+      if(r.t && !/^\[?(silence|noise|無音)\]?$/i.test(r.t)){ const e=addEntry(r.t, r.dur+'秒', null, r.end ? (performance.now()-r.end)/1000 : null); requestTranslation(e); }
     }
     this.draining=false;
   },
