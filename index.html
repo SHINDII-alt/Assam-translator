@@ -177,8 +177,8 @@ textarea{min-height:64px}
       <option value="openai-chunk">OpenAI（比較用・ひと言ごとに送信）</option>
     </select>
     <label>モデル</label>
-    <input id="sttModel" list="sttModels" autocomplete="off" autocapitalize="off">
-    <datalist id="sttModels"></datalist>
+    <select id="sttModelSel"></select>
+    <input id="sttModel" autocomplete="off" autocapitalize="off" placeholder="モデルIDを入力" style="display:none;margin-top:6px">
     <div class="hint" id="sttHint"></div>
     <label>言語</label>
     <select id="sttLang">
@@ -196,8 +196,8 @@ textarea{min-height:64px}
       <option value="claude">Claude</option>
     </select>
     <label>モデル</label>
-    <input id="trModel" list="trModels" autocomplete="off" autocapitalize="off">
-    <datalist id="trModels"></datalist>
+    <select id="trModelSel"></select>
+    <input id="trModel" autocomplete="off" autocapitalize="off" placeholder="モデルIDを入力" style="display:none;margin-top:6px">
     <div class="hint" id="trHint"></div>
     <label>話している途中も訳す（仮訳）</label>
     <select id="draftOn">
@@ -262,6 +262,22 @@ const TR_MODELS = {
   openai: {list:['gpt-6-luna','gpt-6.1-terra','gpt-6.1-sol','gpt-5.6-luna'], def:'gpt-6-luna', hint:'GPT-6 Luna が軽量・高速、6.1 Terra がバランス型、6.1 Sol が高性能。'},
   claude: {list:['claude-haiku-5-5','claude-sonnet-5-5','claude-opus-5-5'], def:'claude-haiku-5-5', hint:'Haiku が高速、Sonnet が高精度。'},
 };
+const MODEL_LABELS = {
+  'gemini-3.5-transcribe-live':'Gemini 3.5 Transcribe Live（標準）',
+  'gemini-3.5-flash-lite':'Gemini 3.5 Flash-Lite（速い・安い）',
+  'gemini-3.8-flash':'Gemini 3.8 Flash（バランス）',
+  'gemini-4-hydrogen':'Gemini 4 Hydrogen（高精度・やや遅い）',
+  'gpt-transcribe':'gpt-transcribe（推奨）',
+  'gpt-4o-transcribe':'gpt-4o-transcribe（旧・2027年2月終了）',
+  'nmt':'Google翻訳（標準）',
+  'gpt-6-luna':'GPT-6 Luna（速い・安い）',
+  'gpt-6.1-terra':'GPT-6.1 Terra（バランス）',
+  'gpt-6.1-sol':'GPT-6.1 Sol（高性能・やや遅い）',
+  'gpt-5.6-luna':'GPT-5.6 Luna（旧世代）',
+  'claude-haiku-5-5':'Claude Haiku 5.5（速い・安い）',
+  'claude-sonnet-5-5':'Claude Sonnet 5.5（高精度）',
+  'claude-opus-5-5':'Claude Opus 5.5（最高精度・遅い）',
+};
 const DEFAULTS = {
   sttEngine:'gemini-live', sttModel:'', sttLang:'as', silenceSec:0.8, maxSec:12, vadThresh:0.012,
   trEngine:'gemini', trModel:'', target:'ja', draftOn:'on', draftSec:1.5, scrollSpeed:'normal', context:'', vocab:'',
@@ -280,17 +296,36 @@ function saveSettings(){ try{ localStorage.setItem(LS, JSON.stringify(S)); }catc
 const $ = id => document.getElementById(id);
 const FIELDS = ['sttEngine','sttModel','sttLang','trEngine','trModel','draftOn','draftSec','scrollSpeed','context','vocab','keyGemini','keyOpenai','keyClaude','keyGct'];
 
-function fillDatalist(dl, list){ dl.innerHTML = list.map(m=>`<option value="${m}">`).join(''); }
+/* モデルのプルダウン（一覧から選択＋「その他（手入力）」） */
+function fillModelSelect(selId, inputId, list, cur){
+  const sel=$(selId), inp=$(inputId);
+  const inList = list.includes(cur);
+  sel.innerHTML = list.map(m=>`<option value="${m}">${esc(MODEL_LABELS[m]||m)}</option>`).join('')
+    + `<option value="__custom">その他（モデルIDを手入力）${inList?'':'：'+esc(cur)}</option>`;
+  sel.value = inList ? cur : '__custom';
+  inp.style.display = inList ? 'none' : '';
+}
+function bindModelSelect(selId, inputId, key){
+  $(selId).addEventListener('change', ()=>{
+    const v=$(selId).value, inp=$(inputId);
+    if(v==='__custom'){ inp.style.display=''; inp.value=S[key]; inp.focus(); return; }
+    inp.style.display='none'; inp.value=v; S[key]=v; saveSettings(); updateChips();
+  });
+}
 function syncSettingsUI(){
   FIELDS.forEach(f=>{ $(f).value = S[f]; });
-  const sm = STT_MODELS[S.sttEngine]; fillDatalist($('sttModels'), sm.list);
+  const sm = STT_MODELS[S.sttEngine];
   if(!S.sttModel || !sameFamily(S.sttEngine, S.sttModel)) { S.sttModel = sm.def; $('sttModel').value = sm.def; }
+  fillModelSelect('sttModelSel','sttModel', sm.list, S.sttModel);
   $('sttHint').textContent = sm.hint;
-  const tm = TR_MODELS[S.trEngine]; fillDatalist($('trModels'), tm.list);
+  const tm = TR_MODELS[S.trEngine];
   if(!S.trModel || !sameFamilyTr(S.trEngine, S.trModel)) { S.trModel = tm.def; $('trModel').value = tm.def; }
+  fillModelSelect('trModelSel','trModel', tm.list, S.trModel);
   $('trHint').textContent = tm.hint;
   updateChips();
 }
+bindModelSelect('sttModelSel','sttModel','sttModel');
+bindModelSelect('trModelSel','trModel','trModel');
 function sameFamily(eng, m){
   if(eng==='gemini-live') return /live/.test(m);
   if(eng==='gemini-chunk') return /^gemini/.test(m) && !/live/.test(m);
