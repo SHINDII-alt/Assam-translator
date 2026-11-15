@@ -56,8 +56,25 @@ header{gap:6px}
   border-left:3px solid transparent;transition:opacity .3s,background .3s;letter-spacing:.01em}
 .tail{white-space:pre-line;padding:0 10px}
 .seg.old{opacity:.62}
-.seg.latest{border-left-color:var(--accent);background:rgba(255,255,255,.035)}
-.seg.hl{background:rgba(45,143,213,.2);opacity:1}
+.seg{--pc:#56636f;border-left:4px solid var(--pc)}
+.seg[data-c="0"]{--pc:#3fb37f}.seg[data-c="1"]{--pc:#2d8fd5}.seg[data-c="2"]{--pc:#d08bd8}
+.seg[data-c="3"]{--pc:#e5a23a}.seg[data-c="4"]{--pc:#4fc1c9}.seg[data-c="5"]{--pc:#e07a6a}
+.seg.latest{background:rgba(255,255,255,.045)}
+.seg.hl{background:rgba(255,255,255,.13);opacity:1;box-shadow:0 0 0 2px var(--pc)}
+/* 上下をつなぐ番号バッジ */
+.no{display:inline-block;min-width:1.7em;text-align:center;font-size:11px;font-weight:800;color:#0b0f13;background:var(--pc);
+  border-radius:9px;padding:0 6px;margin-right:6px;line-height:17px;vertical-align:1px;font-style:normal;letter-spacing:0}
+.trhead{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:500;line-height:17px;margin-bottom:2px;color:var(--sub)}
+.trhead .no{margin-right:0}
+.st{border-radius:4px;padding:0 6px;font-size:10.5px;font-weight:700;letter-spacing:.03em}
+.st.draft{color:#1a1405;background:#e5c76a}
+.st.wait{color:var(--sub);border:1px solid var(--line)}
+.st.recv{color:#fff;background:var(--accent2)}
+.st.final{color:var(--accent);border:1px solid rgba(63,179,127,.5)}
+#paneTr .seg.drafting{border-left-style:dashed;background:repeating-linear-gradient(135deg,rgba(229,199,106,.06) 0 8px,transparent 8px 16px)}
+#paneTr .seg.drafting .tx{color:#d9cfa6;font-weight:500}
+#paneTr .seg.justfinal{animation:finalflash 1.2s ease-out}
+@keyframes finalflash{0%{background:rgba(63,179,127,.28)}100%{background:rgba(255,255,255,.045)}}
 #paneSrc .seg{font-size:calc(var(--fs)*16px);line-height:1.65;color:#cfd8e0}
 #paneSrc .seg .orig{color:#e3e9ee}
 #paneSrc .seg .srcen{font-size:.88em;color:#9fc3dd;margin-top:3px}
@@ -66,19 +83,21 @@ header{gap:6px}
 #paneTr .seg{font-size:calc(var(--fs)*22px);line-height:1.6;font-weight:600}
 #paneTr .seg .en{display:block;font-size:calc(var(--fs)*16px);font-weight:500;color:#bfe3ff;
   margin-top:6px;padding-top:5px;border-top:1px dashed rgba(255,255,255,.12)}
-#paneTr .seg.drafting{color:var(--draft);font-weight:500}
-#paneTr .seg.pending{color:var(--interim);font-weight:400;font-size:calc(var(--fs)*15px)}
+#paneTr .seg.pending .tx{color:var(--interim);font-weight:400;font-size:calc(var(--fs)*15px)}
 #paneTr .seg .err{color:var(--err);font-size:13px;font-weight:400}
 .cursor::after{content:"▍";color:var(--accent);animation:blink 1s steps(1) infinite;margin-left:1px}
 @keyframes blink{50%{opacity:0}}
 .tail{min-height:1.4em}
 #srcTail{font-size:calc(var(--fs)*17px);line-height:1.65;color:#dfe7ee;font-weight:500;padding:6px 10px;margin-bottom:4px;
-  border-left:3px solid var(--accent2);border-radius:8px;background:rgba(45,143,213,.08)}
+  border-left:4px dashed var(--accent2);border-radius:8px;background:rgba(45,143,213,.08)}
 #srcTail:empty{display:none}
 #srcTail.live::after{content:"▍";color:var(--accent2);animation:blink 1s steps(1) infinite;margin-left:2px}
 #srcTail.live::before{content:"LIVE";font-size:9px;font-weight:700;letter-spacing:.08em;color:#fff;background:var(--accent2);
   border-radius:3px;padding:1px 4px;margin-right:7px;vertical-align:middle}
-#trTail{font-size:calc(var(--fs)*20px);line-height:1.6;color:var(--draft);font-weight:500}
+#trTail{font-size:calc(var(--fs)*20px);line-height:1.6;color:#d9cfa6;font-weight:500;padding:6px 10px;margin-bottom:4px;
+  border-left:4px dashed var(--accent2);border-radius:8px;background:rgba(45,143,213,.08)}
+#trTail:empty{display:none}
+#trTail::before{content:"LIVE 仮訳（話し中・変わります）";display:block;font-size:10px;font-weight:700;letter-spacing:.05em;color:#9cc8ea;margin-bottom:2px}
 #trTail .en{display:block;font-size:calc(var(--fs)*15px);color:#8fb2c8;margin-top:4px}
 .jump{position:absolute;right:12px;bottom:10px;background:var(--accent2);color:#fff;border:0;border-radius:999px;
   padding:5px 12px;font-size:12px;display:none;box-shadow:0 2px 8px rgba(0,0,0,.4)}
@@ -299,7 +318,7 @@ textarea{min-height:64px}
       <button class="btn ghost" id="btnKeyCheck">キー接続テスト</button>
     </div>
     <div class="hint" id="keyCheckOut"></div>
-    <div class="hint" style="margin-top:14px;opacity:.7">版：2026-11-15h ライブ字幕</div>
+    <div class="hint" style="margin-top:14px;opacity:.7">版：2026-11-15i 番号でつなぐ</div>
     <div class="hint" style="margin-top:14px">医療面談で使う場合は、相手の同意を得て、重要な判断に関わる内容は必ず人（通訳者）が確認してください。AIの翻訳は誤る可能性があります。</div>
   </div>
 </div>
@@ -587,7 +606,8 @@ function setTrTail(r){
 }
 
 /* ============ 記録 ============ */
-const entries = []; // {i,t,src,ja,en,err,streaming,srcEl,trEl}
+const entries = []; // {i,no,t,src,ja,en,err,streaming,srcEl,trEl}
+let pairSeq = 0;    // 上下をつなぐ通し番号（画面をクリアしても続き番号）
 /* 遅延の計測と表示 */
 const VAD = {lastVoice:0, lastEnd:0, speaking:false};
 function sttDelayNow(){                       // 直近の「話し終わり」から今までの秒数（リアルタイム方式の目安）
@@ -615,7 +635,7 @@ function pushStat(k, v){
 }
 function setLabel(e){
   const tEl = e.srcEl && e.srcEl.querySelector('.t'); if(!tEl) return;
-  const parts = [esc(e.t)];
+  const parts = [`<b class="no">${e.no}</b>` + esc(e.t)];
   if(e.first!=null) parts.push(`字幕 ${latHtml(e.first)}`);
   if(e.stt!=null) parts.push(`確定 ${latHtml(e.stt)}`);
   if(e.lat!=null) parts.push(`翻訳 ${latHtml(e.lat + (e.wait||0))}` + (e.wait>0.3 ? `（うち待ち ${e.wait.toFixed(1)}秒）` : ''));
@@ -637,13 +657,13 @@ function attachOrig(e, text){
 }
 function addEntry(src, meta, draft, stt){
   $('emptyMsg').style.display='none';
-  const e = {i:entries.length, tq:performance.now(), t:now(), src, ja:null, en:null, err:null, streaming:false, meta:meta||'', draft:draft||null};
-  e.srcEl = document.createElement('div'); e.srcEl.className='seg';
+  const e = {i:entries.length, no:++pairSeq, tq:performance.now(), t:now(), src, ja:null, en:null, err:null, streaming:false, meta:meta||'', draft:draft||null};
+  e.srcEl = document.createElement('div'); e.srcEl.className='seg'; e.srcEl.dataset.c = e.no % 6;
   e.srcEl.innerHTML = `<span class="t">${e.t}</span>${esc(brk(src))}`;
   if(stt === undefined) stt = (running && !/テキスト|途中/.test(meta||'')) ? sttDelayNow() : null;
   e.first = (running && LIVE_ENGINES.includes(S.sttEngine)) ? FirstCap.take() : null;
   e.stt = stt; setLabel(e); pushStat('first', e.first); pushStat('stt', stt);
-  e.trEl = document.createElement('div'); e.trEl.className='seg';
+  e.trEl = document.createElement('div'); e.trEl.className='seg'; e.trEl.dataset.c = e.no % 6;
   e.srcEl.onclick = ()=>linkTo(e, 'tr'); e.trEl.onclick = ()=>linkTo(e, 'src');
   $('srcList').appendChild(e.srcEl); $('trList').appendChild(e.trEl);
   // 最新だけ明るく、2つ前より古いものは少し暗く
@@ -655,40 +675,52 @@ function addEntry(src, meta, draft, stt){
   srcScroll.bottom();
   return e;
 }
+let hlTimer = null;
 function linkTo(e, where){
   document.querySelectorAll('.seg.hl').forEach(x=>x.classList.remove('hl'));
   e.srcEl.classList.add('hl'); e.trEl.classList.add('hl');
-  (where==='tr'?e.trEl:e.srcEl).scrollIntoView({block:'nearest', behavior:'smooth'});
-  setTimeout(()=>{ e.srcEl.classList.remove('hl'); e.trEl.classList.remove('hl'); }, 2500);
+  // 相手側の段を、対応する行が真ん中に来るようにスクロール（ページ全体は動かさない）
+  const el = where==='tr' ? e.trEl : e.srcEl, box = $(where==='tr' ? 'trBody' : 'srcBody');
+  if(box.offsetParent){ const top = el.offsetTop - box.offsetTop - (box.clientHeight - el.offsetHeight)/2;
+    box.scrollTo({top: Math.max(0, top), behavior:'smooth'}); }
+  clearTimeout(hlTimer);
+  hlTimer = setTimeout(()=>{ e.srcEl.classList.remove('hl'); e.trEl.classList.remove('hl'); }, 4000);
+}
+/* 翻訳の段の状態（仮訳／翻訳中／受信中／確定）を、他のクラスを消さずに切り替える */
+const TR_STATE = {draft:['drafting','<span class="st draft">仮訳・更新中</span>'], wait:['pending','<span class="st wait">翻訳中…</span>'],
+  recv:['receiving','<span class="st recv">確定訳を受信中</span>'], final:['','<span class="st final">✓ 確定</span>'], none:['pending','<span class="st wait">訳なし</span>'], err:['','']};
+function paintTr(e, state, body, cursor){
+  const el = e.trEl, wasFinal = el.dataset.state === 'final';
+  ['drafting','pending','receiving'].forEach(c=>el.classList.remove(c));
+  const [cls, tag] = TR_STATE[state]; if(cls) el.classList.add(cls);
+  el.dataset.state = state;
+  el.innerHTML = `<div class="trhead"><b class="no">${e.no}</b>${tag}</div><div class="tx${cursor?' cursor':''}">${body}</div>`;
+  if(state==='final' && !wasFinal){ el.classList.remove('justfinal'); void el.offsetWidth; el.classList.add('justfinal'); }
+  trScroll.bottom();
 }
 function renderEntry(e){
   const want=S.target, el=e.trEl;
-  if(e.err){ el.className='seg'; el.innerHTML = `<span class="err">翻訳エラー: ${esc(e.err)}</span>`; trScroll.bottom(); return; }
+  if(e.err){ paintTr(e, 'err', `<span class="err">翻訳エラー: ${esc(e.err)}</span>`); return; }
   // 正式な訳が仮訳の長さに追いつくまでは、仮訳をそのまま表示しておく（消えない）
   if(e.draft && !e.done && !e.err){
     const main = r => want==='en' ? (r.en||'') : (r.ja||'');
     if(main(e).length < main(e.draft).length){
-      el.className='seg drafting';
       let h='';
       if(want!=='en' && e.draft.ja) h += esc(brk(e.draft.ja));
       if(want!=='ja' && e.draft.en) h += want==='both' ? `<span class="en">${esc(brk(e.draft.en))}</span>` : esc(brk(e.draft.en));
-      el.innerHTML = h; trScroll.bottom(); return;
+      paintTr(e, 'draft', h); return;
     }
   }
   if(e.done) e.draft = null;
   const hasJa = e.ja!=null && e.ja!=='', hasEn = e.en!=null && e.en!=='';
   if(!hasJa && !hasEn){
-    el.className='seg pending' + (e.streaming?' cursor':'');
-    el.textContent = e.streaming ? '' : (e.ja===''||e.en==='' ? '（訳なし）' : '翻訳中…');
-    trScroll.bottom(); return;
+    const none = !e.streaming && (e.ja===''||e.en==='');
+    paintTr(e, none ? 'none' : (e.streaming ? 'recv' : 'wait'), '', e.streaming); return;
   }
-  el.className='seg';
   let h='';
   if(want!=='en' && hasJa) h += esc(brk(e.ja));
   if(want!=='ja' && hasEn) h += want==='both' ? `<span class="en">${esc(brk(e.en))}</span>` : esc(brk(e.en));
-  el.innerHTML = h;
-  if(e.streaming) el.classList.add('cursor');
-  trScroll.bottom();
+  paintTr(e, e.streaming ? 'recv' : 'final', h, e.streaming);
 }
 const archive = []; // 画面からクリアした分（書き出しには含める）
 function clearScreen(){
